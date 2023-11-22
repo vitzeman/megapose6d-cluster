@@ -53,7 +53,12 @@ LABELS = {
 
 
 class MegaposeInferenceServer:
-    def __init__(self, KPath: Path, model_name: str = "megapose-1.0-RGB-multi-hypothesis") -> None:
+    def __init__(
+        self,
+        KPath: Path,
+        model_name: str = "megapose-1.0-RGB-multi-hypothesis",
+        visualize: bool = False,
+    ) -> None:
         self.model_info = NAMED_MODELS[model_name]
 
         # Maybe replace with loading from json file
@@ -85,16 +90,18 @@ class MegaposeInferenceServer:
         self.pose_estimator = load_named_model(model_name, self.object_dataset).cuda()
 
         # Visualization
-        self.vis_dir = PATH2VIS
-        os.makedirs(self.vis_dir, exist_ok=True)
-        self.renderer = Panda3dSceneRenderer(self.object_dataset)
-        self.light_datas = [
-            Panda3dLightData(
-                light_type="ambient",
-                color=((1.0, 1.0, 1.0, 1)),
-            ),
-        ]
-        self.plotter = BokehPlotter()
+        self.visualize = visualize
+        if self.visualize:
+            self.vis_dir = PATH2VIS
+            os.makedirs(self.vis_dir, exist_ok=True)
+            self.renderer = Panda3dSceneRenderer(self.object_dataset)
+            self.light_datas = [
+                Panda3dLightData(
+                    light_type="ambient",
+                    color=((1.0, 1.0, 1.0, 1)),
+                ),
+            ]
+            self.plotter = BokehPlotter()
 
     def run_inference(self, image: np.ndarray, bbox: np.ndarray, id: np.ndarray) -> np.ndarray:
         # TODO: add dimension to description

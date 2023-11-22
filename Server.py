@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--host", type=str, default=HOST)
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("-K", type=str, default="")  # TODO addsome default K matrix
+    parser.add_argument("-v", "--visualze", action="store_true")
 
     args = parser.parse_args()
     if args.K == "":
@@ -46,9 +47,10 @@ def run_pose_est_server():
     host = args.host
     port = args.port
     K_path = args.K
+    visualize = args.visualze
 
     print("Initializing the estimator")
-    pose_estimator = MegaposeInferenceServer(K_path)
+    pose_estimator = MegaposeInferenceServer(K_path, visualize=visualize)
 
     with MLSocket() as s:
         s.setsockopt(
@@ -76,8 +78,9 @@ def run_pose_est_server():
                 print(f"Running inference")
                 pose = pose_estimator.run_inference(img, bbox, label)
 
-                print(f"Running Visualiztion")
-                pose_estimator.visualize_pose(pose, img, label)
+                if visualize:
+                    print(f"Running Visualiztion")
+                    pose_estimator.visualize_pose(pose, img, label)
 
                 # pose = np.array([1, 2, 3, 4, 5, 6, 7])  # quaternion + translation
                 conn.send(pose)
