@@ -76,6 +76,9 @@ def run_pose_est_server():
                 print(f"Running inference")
                 pose = pose_estimator.run_inference(img, bbox, label)
 
+                print(f"Running Visualiztion")
+                pose_estimator.visualize_pose(pose, img, label)
+
                 # pose = np.array([1, 2, 3, 4, 5, 6, 7])  # quaternion + translation
                 conn.send(pose)
 

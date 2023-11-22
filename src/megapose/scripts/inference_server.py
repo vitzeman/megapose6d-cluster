@@ -8,7 +8,8 @@ from dataclasses import dataclass
 # Third Party
 import numpy as np
 
-# from bokeh.io import export_png
+from bokeh.io import export_png
+
 # from bokeh.plotting import gridplot
 from PIL import Image
 
@@ -35,6 +36,8 @@ logger = get_logger(__name__)
 PATH2MESHES = Path(
     "/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "meshes_BakedSDF"
 )
+PATH2VIS = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "vis")
+
 # TODO: Create directory with all the meshes for megapose # Probably the bakedsdf
 
 LABELS = {
@@ -54,6 +57,7 @@ class MegaposeInferenceServer:
         self.model_info = NAMED_MODELS[model_name]
 
         # Maybe replace with loading from json file
+        self.camera_json_path = KPath
         with open(KPath, "r") as f:
             K_dict = json.load(f)
             # self.K = K_dict["K"]
@@ -79,6 +83,18 @@ class MegaposeInferenceServer:
 
         print("Loading model")
         self.pose_estimator = load_named_model(model_name, self.object_dataset).cuda()
+
+        # Visualization
+        self.vis_dir = PATH2VIS
+        os.makedirs(self.vis_dir, exist_ok=True)
+        self.renderer = Panda3dSceneRenderer(self.object_dataset)
+        self.light_datas = [
+            Panda3dLightData(
+                light_type="ambient",
+                color=((1.0, 1.0, 1.0, 1)),
+            ),
+        ]
+        self.plotter = BokehPlotter()
 
     def run_inference(self, image: np.ndarray, bbox: np.ndarray, id: np.ndarray) -> np.ndarray:
         # TODO: add dimension to description
@@ -132,3 +148,37 @@ class MegaposeInferenceServer:
         translation = pose.translation
 
         return np.concatenate([quaternion, translation])
+
+    def visualize_pose(self, pose: np.ndarray, rgb: np.ndarray, id: np.ndarray):
+        quat = pose[:4]
+        transl = pose[4:]
+        id = int(id[0])
+        label = LABELS[id]
+        TWO = [quat.tolist(), transl.tolist()]
+
+        object_data = [{"label": label, "TWO": TWO}]
+        object_datas = [ObjectData.from_json(d) for d in object_data]
+        camera_data = CameraData.from_json(self.camera_json_path.read_text())
+        camera_data.TWC = Transform(np.eye(4))
+
+        camera_data, object_datas = convert_scene_observation_to_panda3d(camera_data, object_datas)
+
+        renderings = self.renderer.render_scene(
+            object_datas,
+            [camera_data],
+            self.light_datas,
+            render_depth=False,
+            render_binary_mask=False,
+            render_normals=False,
+            copy_arrays=True,
+        )[0]
+
+        fig_mesh_overlay = self.plotter.plot_overlay(rgb, renderings.rgb)
+        contour_overlay = make_contour_overlay(
+            rgb, renderings.rgb, dilate_iterations=1, color=(0, 255, 0)
+        )["img"]
+
+        fig_contour_overlay = self.plotter.plot_image(contour_overlay)
+
+        export_png(fig_mesh_overlay, filename=self.vis_dir / "mesh_overlay.png")
+        export_png(fig_contour_overlay, filename=self.vis_dir / "contour_overlay.png")
