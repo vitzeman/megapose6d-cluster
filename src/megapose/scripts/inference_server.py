@@ -92,6 +92,7 @@ class MegaposeInferenceServer:
         # Visualization
         self.visualize = visualize
         if self.visualize:
+            print("Preparing visualization")
             self.vis_dir = PATH2VIS
             os.makedirs(self.vis_dir, exist_ok=True)
             self.renderer = Panda3dSceneRenderer(self.object_dataset)
