@@ -104,14 +104,17 @@ class MegaposeInferenceServer:
             ]
             self.plotter = BokehPlotter()
 
-    def run_inference(self, image: np.ndarray, bbox: np.ndarray, id: np.ndarray) -> np.ndarray:
+    def run_inference(
+        self, image: np.ndarray, bbox: np.ndarray, id: np.ndarray, K: np.ndarray
+    ) -> np.ndarray:
         # TODO: add dimension to description
-        """Runs inference on a image with given bbox and id.
+        """Runs inference on an UNDISTOR image with given bbox and id.
 
         Args:
             image (np.ndarray): Image to run inference on.
             bbox (np.ndarray): Bounding box of the object in the image.
             id (np.ndarray): Id of the object in the image.
+            K (np.ndarray): Intrinsic matrix ot the drame
 
         Returns:
             np.ndarray: quaternion and translation of the object. Shape(7,)
@@ -130,7 +133,7 @@ class MegaposeInferenceServer:
 
         # Observation data
         # print(self.K)
-        observation = ObservationTensor.from_numpy(rgb, depth, self.K).cuda()  # DONE
+        observation = ObservationTensor.from_numpy(rgb, depth, K).cuda()  # DONE
 
         # detections data
         object_data = [
@@ -157,7 +160,7 @@ class MegaposeInferenceServer:
 
         return np.concatenate([quaternion, translation])
 
-    def visualize_pose(self, pose: np.ndarray, rgb: np.ndarray, id: np.ndarray):
+    def visualize_pose(self, pose: np.ndarray, rgb: np.ndarray, id: np.ndarray, K: np.ndarray):
         quat = pose[:4]
         transl = pose[4:]
         id = int(id[0])
@@ -166,7 +169,14 @@ class MegaposeInferenceServer:
 
         object_data = [{"label": label, "TWO": TWO}]
         object_datas = [ObjectData.from_json(d) for d in object_data]
-        camera_data = CameraData.from_json(self.camera_json_path.read_text())
+
+        h, w = rgb.shape[:2]
+
+        camera_data = CameraData()
+        camera_data.K = K
+        camera_data.resolution = (h, w)
+
+        # camera_data = CameraData.from_json(self.camera_json_path.read_text())
         camera_data.TWC = Transform(np.eye(4))
 
         camera_data, object_datas = convert_scene_observation_to_panda3d(camera_data, object_datas)

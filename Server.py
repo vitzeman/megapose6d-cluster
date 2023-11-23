@@ -5,6 +5,8 @@ import argparse
 from pathlib import Path
 import os
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,3"
+
 # 3rd party
 from mlsocket import MLSocket
 import cv2
@@ -23,7 +25,6 @@ K_PATH = Path(
 )
 # cv2.namedWindow("TestServer", cv2.WINDOW_NORMAL)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 LABELS = {
     1: "d01_controller",
@@ -79,6 +80,8 @@ def run_pose_est_server():
                 bbox = conn.recv(1024)
                 label = conn.recv(1024)
 
+                K = conn.recv(1024)
+
                 idx = label[0]
                 if idx == -1:  # TODO: Maybe finish when label -1 was sent
                     break
@@ -88,7 +91,7 @@ def run_pose_est_server():
                 # TODO: Bassically write in megapose function to get the pose
                 print(f"Running inference on incoming data:")
                 print(f"\timg {img.shape}, bbox = {bbox}, label = {idx}:={LABELS[idx]}")
-                pose = pose_estimator.run_inference(img, bbox, label)
+                pose = pose_estimator.run_inference(img, bbox, label, K)
 
                 # pose = np.array([1, 2, 3, 4, 5, 6, 7])  # quaternion + translation
                 conn.send(pose)
@@ -100,7 +103,7 @@ def run_pose_est_server():
 
                 if visualize:
                     print(f"Running Visualiztion")
-                    pose_estimator.visualize_pose(pose, img, label)
+                    pose_estimator.visualize_pose(pose, img, label, K)
 
                 # break  # TODO: Remove after testing for iterations
     print("Closing server")
