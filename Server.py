@@ -107,6 +107,7 @@ def run_pose_est_server():
 
                 # break  # TODO: Remove after testing for iterations
     print("Closing server")
+    del pose_estimator
 
 
 if __name__ == "__main__":
