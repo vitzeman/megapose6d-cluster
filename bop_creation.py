@@ -4,6 +4,7 @@ import cv2
 import os
 import json
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 from megapose.datasets.object_dataset import RigidObject, RigidObjectDataset
 from megapose.lib3d.transform import Transform
@@ -44,23 +45,7 @@ LABELS = {
 
 
 class BboxFromProjection:
-    def __init__(self, KPath: Path) -> None:
-        with open(KPath, "r") as f:
-            K_dict = json.load(f)
-            # self.K = K_dict["K"]
-            # print(self.K)
-            # self.res = K_dict["resolution"]  # TODO: Maybe add checking for the given expected shape
-            self.res = [0, 0]
-            for key in K_dict.keys():
-                if key in ["K", "camera_matrix"]:
-                    self.K = K_dict[key]
-                elif key in ["resolution"]:
-                    self.res = K_dict[key]
-                elif key in ["w", "width"]:
-                    self.res[1] = K_dict[key]
-                elif key in ["h", "height"]:
-                    self.res[0] = K_dict[key]
-
+    def __init__(self) -> None:
         rigid_objects = []
         for key, label in LABELS.items():
             mesh_path = PATH2MESHES / label / "mesh.obj"
@@ -76,11 +61,27 @@ class BboxFromProjection:
             ),
         ]
 
-    def get_bbox(self, pose: np.ndarray, label: str):
-        camera_data = CameraData()
-        camera_data.K = self.K
+    def get_bbox(
+        self, K: np.ndarray, pose: np.ndarray, label: str, res: Tuple[int, int]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Returns the bounding box and the mask of the object by projecting the mesh to the image plane
 
-        camera_data.resolution = (self.res[0], self.res[1])
+        Args:
+            K (np.ndarray): Undistorted camera matrix
+            pose (np.ndarray): 4x4 pose matrix of the object
+            label (str): label of the object
+            res (Tuple[int, int]): Resolution of the image to be rendered (height, width)
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: Bounding box and mask of the object
+        """
+        if label not in LABELS.keys():
+            raise ValueError(f"Label {label} not in {LABELS.keys()}")
+
+        camera_data = CameraData()
+        camera_data.K = K
+
+        camera_data.resolution = res
         camera_data.TWC = Transform(np.eye(4))
 
         object_data = [{"label": label, "TWO": pose}]  # TODO: check the correctness of the pose
@@ -101,9 +102,64 @@ class BboxFromProjection:
 
         mask = renderings[0].masks
         bbox = get_bbox_from_mask(mask)
-        return bbox
+
+        return mask, bbox
 
 
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    bop_folder = os.path.join()
+    bop_folder = os.path.join("6D_pose_dataset", "BOP_format")
+
+    camera_data_folder = os.path.join("6D_pose_dataset", "camera_data")
+
+    in_image_folder = os.path.join("6D_pose_dataset", "images")
+
+    out_image_folder = os.path.join(bop_folder, "color")
+
+    scene_gt = {}
+    scene_gt_info = {}
+    scene_camera = {}
+
+    with open(os.path.join(camera_data_folder, "camera_parameters.json"), "r") as f:
+        camera_parameters = json.load(f)
+
+    K_distorted = np.array(camera_parameters["camera_matrix"])
+    dist_coeffs = np.array(camera_parameters["distortion_coefficients"])
+    height_distorted = camera_parameters["height"]
+    width_distorted = camera_parameters["width"]
+
+    K_undistorted, roi = cv2.getOptimalNewCameraMatrix(
+        K_distorted, dist_coeffs, (width_distorted, height_distorted), 0
+    )
+    x, y, w, h = roi
+
+    with open(
+        os.path.join("6D_pose_dataset", "transformation", "transformations_nerfacto.json"), "r"
+    ) as f:
+        T_W2M_dict = json.load(f)
+
+    with open(os.path.hoin(camera_data_folder, "transforms.json"), "r") as f:
+        T_W2C_dict = json.load(f)
+
+    bop = BboxFromProjection()
+    images_path = sorted(os.listdir(in_image_folder))
+    label_id = 11
+    for image_p in images_path:
+        image = cv2.imread(os.path.join(in_image_folder, image_p))
+        image_name = image_p.split(".")[0]
+
+        img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
+        img_undistorted = img_undistorted[y : y + h, x : x + w]
+
+        T_W2C = np.array(T_W2C_dict[image_name])
+        T_W2M = np.array(T_W2M_dict[LABELS[label_id]])
+
+        T_C2M = np.linalg.inv(T_W2C) @ T_W2M
+        T_M2C = np.linalg.inv(T_W2M) @ T_W2C
+
+        mask, bbox = bop.get_bbox(K_undistorted, T_M2C, label_id, (h, w))
+        blended = cv2.addWeighted(img_undistorted, 0.5, mask, 0.5, 0)
+        cv2.imshow("blended", blended)
+        cv2.imwrite(os.path.join(out_image_folder, image_p), blended)
+        cv2.imshow("mask", mask)
+        cv2.waitKey(0)
