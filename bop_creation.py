@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from scipy.spatial.transform import Rotation as R
 
 import os
 import json
@@ -75,8 +76,8 @@ class BboxFromProjection:
         Returns:
             Tuple[np.ndarray, np.ndarray]: Bounding box and mask of the object
         """
-        if label not in LABELS.keys():
-            raise ValueError(f"Label {label} not in {LABELS.keys()}")
+        if label not in LABELS.values():
+            raise ValueError(f"Label {label} is not in the list of labels {LABELS.values()}")
 
         camera_data = CameraData()
         camera_data.K = K
@@ -84,7 +85,12 @@ class BboxFromProjection:
         camera_data.resolution = res
         camera_data.TWC = Transform(np.eye(4))
 
-        object_data = [{"label": label, "TWO": pose}]  # TODO: check the correctness of the pose
+        # TWO needs to be list [quat, translation]
+        quat = pose[:3, :3]
+        quat = R.from_matrix(quat).as_quat().tolist()
+        translation = pose[:3, 3].tolist()
+        TWO = [quat, translation]
+        object_data = [{"label": label, "TWO": TWO}]  # TODO: check the correctness of the pose
         object_datas = [ObjectData.from_json(d) for d in object_data]
 
         camera_data.TWC = Transform(np.eye(4))
@@ -115,6 +121,7 @@ if __name__ == "__main__":
     in_image_folder = os.path.join("6D_pose_dataset", "images")
 
     out_image_folder = os.path.join(bop_folder, "color")
+    os.makedirs(out_image_folder, exist_ok=True)
 
     scene_gt = {}
     scene_gt_info = {}
@@ -139,27 +146,32 @@ if __name__ == "__main__":
         T_W2M_dict = json.load(f)
 
     with open(os.path.join(camera_data_folder, "transforms.json"), "r") as f:
-        T_W2C_dict = json.load(f)
+        # Tady je chyba nutno načítat jinak
+        transforms = json.load(f)
 
     bop = BboxFromProjection()
-    images_path = sorted(os.listdir(in_image_folder))
-    label_id = 11
-    for image_p in images_path:
-        image = cv2.imread(os.path.join(in_image_folder, image_p))
-        image_name = image_p.split(".")[0]
+    frames = transforms["frames"]
+    label_id = 1
+    for frame in frames:
+        image_path = frame["file_path"]
+        image_name = image_path.split("/")[-1]
+        if image_name != "001430.png":  # TODO: remove later
+            continue
 
+        image = cv2.imread(os.path.join(in_image_folder, image_name))
         img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
         img_undistorted = img_undistorted[y : y + h, x : x + w]
 
-        T_W2C = np.array(T_W2C_dict[image_name])
-        T_W2M = np.array(T_W2M_dict[LABELS[label_id]])
+        T_W2C = np.array(frame["transform_matrix"])
+        T_W2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
 
         T_C2M = np.linalg.inv(T_W2C) @ T_W2M
         T_M2C = np.linalg.inv(T_W2M) @ T_W2C
 
-        mask, bbox = bop.get_bbox(K_undistorted, T_M2C, label_id, (h, w))
+        label = LABELS[label_id]
+        mask, bbox = bop.get_bbox(K_undistorted, T_M2C, label, (h, w))
         blended = cv2.addWeighted(img_undistorted, 0.5, mask, 0.5, 0)
         cv2.imshow("blended", blended)
-        cv2.imwrite(os.path.join(out_image_folder, image_p), blended)
+        cv2.imwrite(os.path.join(out_image_folder, image_name), blended)  # Delete later
         cv2.imshow("mask", mask)
         cv2.waitKey(0)
