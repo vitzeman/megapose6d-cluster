@@ -106,6 +106,4 @@ class BboxFromProjection:
 
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    KPath = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "K.json")
-    
-    with open 
+    bop_folder = os.path.join()
