@@ -138,7 +138,7 @@ if __name__ == "__main__":
     ) as f:
         T_W2M_dict = json.load(f)
 
-    with open(os.path.hoin(camera_data_folder, "transforms.json"), "r") as f:
+    with open(os.path.join(camera_data_folder, "transforms.json"), "r") as f:
         T_W2C_dict = json.load(f)
 
     bop = BboxFromProjection()
