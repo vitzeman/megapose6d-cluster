@@ -21,3 +21,6 @@ my-notebooks/
 tmp/
 *tmp/
 tests.sh
+
+
+6D_pose_dataset/images
