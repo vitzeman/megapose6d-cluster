@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import List, Tuple, Union
 from dataclasses import dataclass
+import cv2
 
 # Third Party
 import numpy as np
@@ -200,3 +201,18 @@ class MegaposeInferenceServer:
 
         export_png(fig_mesh_overlay, filename=self.vis_dir / "mesh_overlay.png")
         export_png(fig_contour_overlay, filename=self.vis_dir / "contour_overlay.png")
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+        cv2.imwrite(
+            os.path.join(
+                "/home",
+                "zemanvit",
+                "Projects",
+                "megapose6d",
+                "local_data",
+                "rc_car",
+                "vis",
+                "rgb.png",
+            ),
+            bgr,
+        )
