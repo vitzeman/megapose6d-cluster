@@ -86,12 +86,13 @@ class BboxFromProjection:
         camera_data.TWC = Transform(np.eye(4))
 
         # TWO needs to be list [quat, translation]
-        quat = pose[:3, :3]
-        quat = R.from_matrix(quat).as_quat().tolist()
+        Rtx = pose[:3, :3]
+        quat = R.from_matrix(Rtx).as_quat().tolist()
         translation = pose[:3, 3].tolist()
         TWO = [quat, translation]
         object_data = [{"label": label, "TWO": TWO}]  # TODO: check the correctness of the pose
         object_datas = [ObjectData.from_json(d) for d in object_data]
+        print(object_datas)
 
         camera_data.TWC = Transform(np.eye(4))
         camera_data, object_datas = convert_scene_observation_to_panda3d(camera_data, object_datas)
@@ -101,18 +102,29 @@ class BboxFromProjection:
             [camera_data],
             self.light_datas,
             render_binary_mask=True,
-            render_depth=False,
+            render_depth=True,
             render_normals=False,
             copy_arrays=True,
         )[0]
 
-        mask = renderings[0].masks
+        rgb = renderings.rgb
+        print(f"rgb {type(rgb)} {rgb.shape}, {np.unique(rgb, return_counts=True)}")
+        cv2.imwrite("testrgb.png", rgb)
+
+        mask = renderings.binary_mask
+        # mask = np.expand_dims(mask, axis=2)
+        mask = mask * 255
+        print(f"maks {type(mask)} {mask.shape}, {np.unique(mask, return_counts=True)}")
+        cv2.imwrite("testMask.png", mask)
+        depth = renderings.depth
+        print(f"depth {type(depth)},{depth.shape}, {np.unique(depth, return_counts=True)}")
         bbox = get_bbox_from_mask(mask)
 
         return mask, bbox
 
 
 if __name__ == "__main__":
+    # Use proper GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     bop_folder = os.path.join("6D_pose_dataset", "BOP_format")
 
@@ -136,9 +148,14 @@ if __name__ == "__main__":
     width_distorted = camera_parameters["width"]
 
     K_undistorted, roi = cv2.getOptimalNewCameraMatrix(
-        K_distorted, dist_coeffs, (width_distorted, height_distorted), 0
+        K_distorted,
+        dist_coeffs,
+        (width_distorted, height_distorted),
+        1,
+        (width_distorted, height_distorted),
     )
     x, y, w, h = roi
+    print(roi)
 
     with open(
         os.path.join("6D_pose_dataset", "transformation", "transformations_nerfacto.json"), "r"
@@ -149,29 +166,35 @@ if __name__ == "__main__":
         # Tady je chyba nutno načítat jinak
         transforms = json.load(f)
 
+    W2C_SCALE = transforms["scale_pose"] * 1000  # for mm as everything else is also in mms
+
     bop = BboxFromProjection()
-    frames = transforms["frames"]
+    frames = transforms["frames"]  # List of dicts
     label_id = 1
-    for frame in frames:
+    for frame in frames:  # for dist in list
         image_path = frame["file_path"]
         image_name = image_path.split("/")[-1]
         if image_name != "001430.png":  # TODO: remove later
+            # print(f"Skipping {image_name}")
             continue
 
         image = cv2.imread(os.path.join(in_image_folder, image_name))
         img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
         img_undistorted = img_undistorted[y : y + h, x : x + w]
 
+        # Get the transformation for the camera
         T_W2C = np.array(frame["transform_matrix"])
+        t_W2C = T_W2C[:3, 3] * W2C_SCALE
+        T_W2C[:3, 3] = t_W2C
+
         T_W2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
+        # print(T_W2M)
 
         T_C2M = np.linalg.inv(T_W2C) @ T_W2M
-        T_M2C = np.linalg.inv(T_W2M) @ T_W2C
 
         label = LABELS[label_id]
-        mask, bbox = bop.get_bbox(K_undistorted, T_M2C, label, (h, w))
+        mask, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
         blended = cv2.addWeighted(img_undistorted, 0.5, mask, 0.5, 0)
-        cv2.imshow("blended", blended)
         cv2.imwrite(os.path.join(out_image_folder, image_name), blended)  # Delete later
-        cv2.imshow("mask", mask)
-        cv2.waitKey(0)
+        break
+    print("Finished")

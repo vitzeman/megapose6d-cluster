@@ -4,6 +4,7 @@ import time
 import argparse
 from pathlib import Path
 import os
+import json
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1,3"
 
@@ -25,6 +26,7 @@ K_PATH = Path(
 )
 # cv2.namedWindow("TestServer", cv2.WINDOW_NORMAL)
 
+PATH2POSE = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "pose")
 
 LABELS = {
     1: "d01_controller",
@@ -95,6 +97,8 @@ def run_pose_est_server():
 
                 # pose = np.array([1, 2, 3, 4, 5, 6, 7])  # quaternion + translation
                 conn.send(pose)
+                with open(os.path.join(PATH2POSE, "pose.json"), "w") as f:
+                    json.dump(pose.tolist(), f, indent=2)
 
                 # NOTE: Maybe add some rendering to the background for the
                 print(

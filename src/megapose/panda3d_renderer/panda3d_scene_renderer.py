@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 
-
 # Standard Library
 import builtins
 import os
@@ -149,7 +148,6 @@ class Panda3dSceneRenderer:
         debug: bool = False,
         verbose: bool = False,
     ):
-
         self._asset_dataset = asset_dataset
         self._label_to_node: Dict[str, p3d.core.NodePath] = dict()
         self.verbose = verbose
@@ -255,7 +253,6 @@ class Panda3dSceneRenderer:
     def render_images(
         self, cameras: List[Panda3dCamera], copy_arrays: bool = True, render_depth: bool = False
     ) -> List[CameraRenderingData]:
-
         self._app.graphicsEngine.renderFrame()
         self._app.graphicsEngine.syncFrame()
 
@@ -306,7 +303,6 @@ class Panda3dSceneRenderer:
         render_normals: bool = False,
         clear: bool = True,
     ) -> List[CameraRenderingData]:
-
         start = time.time()
         root_node = self._app.render.attachNewNode("world")
         object_nodes = self.setup_scene(root_node, object_datas)
@@ -332,7 +328,7 @@ class Panda3dSceneRenderer:
                 h, w = rendering_n.depth.shape[:2]
                 binary_mask = np.zeros((h, w), dtype=np.bool_)
                 binary_mask[rendering_n.depth[..., 0] > 0] = 1
-                rendering.binary_mask = binary_mask
+                rendering_n.binary_mask = binary_mask
 
         render_time = time.time() - start
 
