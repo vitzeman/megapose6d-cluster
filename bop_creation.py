@@ -181,6 +181,26 @@ if __name__ == "__main__":
 
     W2C_SCALE = transforms["scale_pose"] * 1000  # for mm as everything else is also in mms
 
+    Rtx_y_n90 = np.array(
+        [
+            [0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0],
+            [-1.0, 0.0, 0.0],
+        ]
+    )
+    Rtx_x_n90 = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, -1.0, 0.0],
+        ]
+    )
+    # Convert from OpenGL to OpenCV camera format and vice versa
+    T_Gl2Cv = np.diag([1, -1, -1, 1])
+
+    T_W2Wn = np.eye(4)
+    T_W2Wn[:3, :3] = Rtx_y_n90 @ Rtx_x_n90
+
     bop = BboxFromProjection()
     frames = transforms["frames"]  # List of dicts
     label_id = 1
@@ -195,7 +215,6 @@ if __name__ == "__main__":
         img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
         img_undistorted = img_undistorted[y : y + h, x : x + w]
         # OpenGL 2 OpenCV camera format
-        T_Gl2Cv = np.diag([1, -1, -1, 1])
         # Get the transformation for the camera
         T_W2C = np.array(frame["transform_matrix"])
         t_W2C = T_W2C[:3, 3] * W2C_SCALE
@@ -207,10 +226,10 @@ if __name__ == "__main__":
 
         # T_W2C = T_W2C @ T_Gl2Cv
 
-        T_W2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
+        T_Wn2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
         # print(T_W2M)
 
-        T_C2M = T_C2W @ T_W2M
+        T_C2M = T_C2W @ T_W2Wn @ T_Wn2M
 
         label = LABELS[label_id]
         mask, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
