@@ -88,8 +88,19 @@ class BboxFromProjection:
         # TWO needs to be list [quat, translation]
         Rtx = pose[:3, :3]
         quat = R.from_matrix(Rtx).as_quat().tolist()
-        translation = pose[:3, 3].tolist()
+        translation = pose[:3, 3] / 1000
+        translation = translation.tolist()
         TWO = [quat, translation]
+        # TWO = [
+        #     [
+        #         -0.10889501872360355,
+        #         -0.145588226070221,
+        #         0.5735067226287865,
+        #         0.7987715787390522,
+        #     ],
+        #     [-0.06374908238649368, 0.022799532860517502, 0.38223040103912354],
+        # ]
+        print(TWO)
         object_data = [{"label": label, "TWO": TWO}]  # TODO: check the correctness of the pose
         object_datas = [ObjectData.from_json(d) for d in object_data]
         print(object_datas)
@@ -118,11 +129,13 @@ class BboxFromProjection:
         cv2.imwrite("testMask.png", mask)
         depth = renderings.depth
         print(f"depth {type(depth)},{depth.shape}, {np.unique(depth, return_counts=True)}")
-        bbox = get_bbox_from_mask(mask)
+        # bbox = get_bbox_from_mask(mask)
+        bbox = None
 
         return mask, bbox
 
 
+# Main
 if __name__ == "__main__":
     # Use proper GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -181,20 +194,72 @@ if __name__ == "__main__":
         image = cv2.imread(os.path.join(in_image_folder, image_name))
         img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
         img_undistorted = img_undistorted[y : y + h, x : x + w]
-
+        # OpenGL 2 OpenCV camera format
+        T_Gl2Cv = np.diag([1, -1, -1, 1])
         # Get the transformation for the camera
         T_W2C = np.array(frame["transform_matrix"])
         t_W2C = T_W2C[:3, 3] * W2C_SCALE
         T_W2C[:3, 3] = t_W2C
 
+        # T_C2W = T_Gl2Cv @ np.linalg.inv(T_W2C)
+
+        T_C2W = np.linalg.inv(T_W2C @ T_Gl2Cv)
+
+        # T_W2C = T_W2C @ T_Gl2Cv
+
         T_W2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
         # print(T_W2M)
 
-        T_C2M = np.linalg.inv(T_W2C) @ T_W2M
+        T_C2M = T_C2W @ T_W2M
 
         label = LABELS[label_id]
         mask, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
-        blended = cv2.addWeighted(img_undistorted, 0.5, mask, 0.5, 0)
-        cv2.imwrite(os.path.join(out_image_folder, image_name), blended)  # Delete later
+        # blended = cv2.addWeighted(img_undistorted, 0.5, mask, 0.5, 0)
+        # cv2.imwrite(os.path.join(out_image_folder, image_name), blended)  # Delete later
         break
     print("Finished")
+
+# DEBUG WORKS
+# if __name__ == "__main__":
+#     # Use proper GPU
+#     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+#     bop_folder = os.path.join("6D_pose_dataset", "BOP_format")
+
+#     camera_data_folder = os.path.join("6D_pose_dataset", "camera_data")
+
+#     in_image_folder = os.path.join("6D_pose_dataset", "images")
+
+#     out_image_folder = os.path.join(bop_folder, "color")
+#     os.makedirs(out_image_folder, exist_ok=True)
+
+#     scene_gt = {}
+#     scene_gt_info = {}
+#     scene_camera = {}
+
+#     with open(os.path.join(camera_data_folder, "camera_parameters.json"), "r") as f:
+#         camera_parameters = json.load(f)
+
+#     K_distorted = np.array(camera_parameters["camera_matrix"])
+#     dist_coeffs = np.array(camera_parameters["distortion_coefficients"])
+#     height_distorted = camera_parameters["height"]
+#     width_distorted = camera_parameters["width"]
+
+#     K_undistorted = np.array(
+#         [
+#             [2252.7609490984723, 0.0, 1238.1309922151056],
+#             [0.0, 2257.3800943711544, 992.1273627597477],
+#             [0.0, 0.0, 1.0],
+#         ]
+#     )
+
+#     bop = BboxFromProjection()
+#     label_id = 3
+#     label = LABELS[label_id]
+
+#     T_C2M = np.eye(4)
+#     h, w = 2035, 2441
+
+#     mask, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
+#     # blended = cv2.addWeighted(img_undistorted, 0.5, mask, 0.5, 0)
+#     # cv2.imwrite(os.path.join(out_image_folder, image_name), blended)  # Delete later
+#     print("Finished")
