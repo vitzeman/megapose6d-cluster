@@ -35,7 +35,13 @@ from megapose.visualization.utils import make_contour_overlay
 logger = get_logger(__name__)
 
 PATH2MESHES = Path(
-    "/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "meshes_BakedSDF"
+    "/home",
+    "zemanvit",
+    "Projects",
+    "megapose6d",
+    "local_data",
+    "rc_car",
+    "meshes_BakedSDF_pickable",
 )
 PATH2VIS = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "vis")
 
