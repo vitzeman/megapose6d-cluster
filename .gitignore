@@ -24,6 +24,7 @@ tests.sh
 
 
 6D_pose_dataset/BOP_format/*/rgb/
+6D_pose_dataset/BOP_format/Capture/*/rgb/
 6D_pose_dataset/out_vis
 6D_pose_dataset/images
 6D_pose_dataset/color

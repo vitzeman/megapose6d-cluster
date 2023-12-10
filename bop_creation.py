@@ -41,6 +41,8 @@ LABELS = {
     8: "d08_chassis",
 }
 
+T_Gl2Cv = np.diag([1, -1, -1, 1])
+
 
 def get_bbox_from_mask(mask: np.ndarray) -> np.ndarray:
     """Returns the bounding box from the mask
@@ -170,11 +172,11 @@ class BboxFromProjection:
         return mask, rgb, bbox
 
 
-# Main
-if __name__ == "__main__":
+def tags_dataset():
     # Use proper GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     bop_folder = os.path.join("6D_pose_dataset", "BOP_format")
+    dataset_names = ["Capture", "Manual", "Tags"]
 
     camera_data_folder = os.path.join("6D_pose_dataset", "camera_data")
 
@@ -325,6 +327,140 @@ if __name__ == "__main__":
     with open(os.path.join(bop_folder, "scene_gt.json"), "w") as f:
         json.dump(scene_gt, f, indent=2)
     print("Finished")
+
+
+def capture_dataset():
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    bop_folder = os.path.join("6D_pose_dataset", "BOP_format", "Capture")
+    label_id = 1
+
+    bop = BboxFromProjection()
+
+    camera_data_folder = os.path.join(bop_folder, "camera_data")
+    with open(os.path.join(camera_data_folder, "camera.json"), "r") as f:
+        camera_parameters = json.load(f)
+
+    K_distorted = np.array(camera_parameters["camera_matrix"])
+    dist_coeffs_dict = camera_parameters["dist_coeff"]
+    print(dist_coeffs_dict)
+    dist_coeffs = []
+    for key in dist_coeffs_dict.keys():
+        dist_coeffs.append(dist_coeffs_dict[key])
+    dist_coeffs = np.array(dist_coeffs)
+    w_distorted, h_distorted = camera_parameters["img_size"]
+
+    K_undistorted, roi = cv2.getOptimalNewCameraMatrix(
+        K_distorted,
+        dist_coeffs,
+        (w_distorted, h_distorted),
+        1,
+        (w_distorted, h_distorted),
+    )
+    x, y, w, h = roi
+
+    items = (
+        "d01_controller",
+        "d02_servo",
+        "d03_main",
+        "d04_motor",
+        "d05_axle_front",  # NOT AVAILABLE
+        "d06_battery",
+        "d07_axle_rear",  # NOT AVAILABLE
+        "d08_chassis",  # NOT AVAILABLE
+    )  # possible items for allignment
+    scales = {
+        "d01_controller": 3.09244982483194,
+        "d02_servo": 3.0869115311413973,
+        "d03_main": 3.0894086594032033,
+        "d04_motor": 3.0898800594246807,
+        "d05_axle_front": 3.0770583466173473,
+        "d06_battery": 3.089705081253575,
+        "d07_axle_rear": 3.079723557204711,
+        "d08_chassis": 3.079275596756827,
+    }
+    transformations = {
+        "d01_controller": [-0.5312432646751404, 0.00018635109881870449, -0.6334784030914307],
+        "d02_servo": [-0.5320762395858765, 0.00018001801799982786, -0.6340343952178955],
+        "d03_main": [-0.5316610336303711, 0.0002628962101880461, -0.6337578296661377],
+        "d04_motor": [-0.5316621661186218, 0.000276119913905859, -0.6337534785270691],
+        "d05_axle_front": [-0.533478319644928, 0.0001823628117563203, -0.5950324535369873],
+        "d06_battery": [-0.5316640734672546, 0.00026901226374320686, -0.6337578892707825],
+        "d07_axle_rear": [-0.5324374437332153, 0.00018274436297360808, -0.614810585975647],
+        "d08_chassis": [-0.5324349403381348, 0.00018191740673501045, -0.6148137450218201],
+    }
+
+    cv2.namedWindow("blended", cv2.WINDOW_NORMAL)
+    # for label_id in [1, 2, 3, 4, 5, 6, 7, 8]:
+    for label_id in [1, 2, 3, 4, 5, 6]:
+        out_folder = os.path.join(bop_folder, str(label_id))
+        print(out_folder)
+        out_img_folder = os.path.join(out_folder, "rgb")
+        in_img_folder = os.path.join(out_folder, "images")
+        os.makedirs(out_img_folder, exist_ok=True)
+        label = LABELS[label_id]
+
+        with open(os.path.join(out_folder, "transforms_all.json"), "r") as f:
+            transforms = json.load(f)
+        scale = 1 / scales[label] * 1000
+        shift = np.array(transformations[label])
+
+        frames = transforms["frames"]
+        K = np.eye(3)
+        K[0, 0] = transforms["fl_x"]
+        K[1, 1] = transforms["fl_y"]
+        K[0, 2] = transforms["cx"]
+        K[1, 2] = transforms["cy"]
+
+        w = transforms["w"]
+        h = transforms["h"]
+        scene_gt = {}
+        scene_camera = {}
+        for frame in tqdm(frames):
+            image_name = frame["file_path"].split("/")[-1]
+            new_name = str(int(image_name.split(".")[0].split("_")[-1])).zfill(6) + ".png"
+            image = cv2.imread(os.path.join(out_img_folder, new_name))
+
+            T_W2C = np.array(frame["transform_matrix"]) @ T_Gl2Cv
+            T_W2C[:3, 3] = (T_W2C[:3, 3] + shift) * scale
+
+            T_C2W = np.linalg.inv(T_W2C)
+            # print(T_C2W)
+
+            mask, rgb, bbox = bop.get_bbox(K_undistorted, T_C2W, label, (h, w))
+
+            mask2show = np.repeat(mask[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
+            blended = cv2.addWeighted(image, 0.5, mask2show, 0.5, 0)
+
+            new_name = str(int(image_name.split(".")[0].split("_")[-1])).zfill(6) + ".png"
+            cv2.imshow("blended", blended)
+            # cv2.imwrite(os.path.join(out_img_folder, new_name), blended)  # Delete later
+            cv2.waitKey(1)
+
+            img_id = str(int(new_name.split(".")[0]))
+
+            scene_gt[img_id] = [
+                {
+                    "obj_id": label_id,
+                    "cam_R_m2c": T_W2C[:3, :3].flatten().tolist(),
+                    "cam_t_m2c": T_W2C[:3, 3].flatten().tolist(),
+                }
+            ]
+            scene_camera[img_id] = {
+                "cam_K": K.flatten().tolist(),
+                "cam_R_w2c": T_W2C[:3, :3].flatten().tolist(),
+                "cam_t_w2c": T_W2C[:3, 3].flatten().tolist(),
+            }
+
+        with open(os.path.join(out_folder, "scene_gt.json"), "w") as f:
+            json.dump(scene_gt, f, indent=2)
+        with open(os.path.join(out_folder, "scene_camera.json"), "w") as f:
+            json.dump(scene_camera, f, indent=2)
+
+
+# Main
+if __name__ == "__main__":
+    print("Starting")
+    capture_dataset()
 
 # DEBUG WORKS
 # if __name__ == "__main__":
