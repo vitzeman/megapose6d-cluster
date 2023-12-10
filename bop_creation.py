@@ -178,7 +178,7 @@ if __name__ == "__main__":
 
     camera_data_folder = os.path.join("6D_pose_dataset", "camera_data")
 
-    in_image_folder = os.path.join("6D_pose_dataset", "images")
+    in_image_folder = os.path.join("6D_pose_dataset", "color")
 
     out_image_folder = os.path.join(bop_folder, "color")
     os.makedirs(out_image_folder, exist_ok=True)
@@ -241,13 +241,15 @@ if __name__ == "__main__":
 
     bop = BboxFromProjection()
     frames = transforms["frames"]  # List of dicts
-    label_id = 1
+    cv2.namedWindow("blended", cv2.WINDOW_NORMAL)
+    scene_gt = {}
     for frame in tqdm(frames):  # for dist in list
+        gt_list = []
         image_path = frame["file_path"]
         image_name = image_path.split("/")[-1]
-        if image_name not in ["001430.png", "005731.png"]:  # TODO: remove later
-            # print(f"Skipping {image_name}")
-            continue
+        # if image_name not in ["001430.png", "005731.png"]:  # TODO: remove later
+        #     # print(f"Skipping {image_name}")
+        #     continue
 
         image = cv2.imread(os.path.join(in_image_folder, image_name))
         img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
@@ -268,6 +270,10 @@ if __name__ == "__main__":
 
             # T_C2M = T_Gl2Cv @ np.linalg.inv(T_W2C) @ T_W2Wn @ T_Wn2M
 
+            # Random shift
+            T_shift = np.eye(4)
+            T_shift[:3, 3] = np.array([0, 0, 0])
+
             T_C2M = T_Gl2Cv @ np.linalg.inv(T_W2C) @ T_W2Wn @ T_Wn2M
 
             # Render the mask, image and bounding box
@@ -279,21 +285,32 @@ if __name__ == "__main__":
             bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             rectangles.append(bbox)
 
-            save_path_rgb = os.path.join(
-                out_vis, image_name.split(".")[0] + "_" + label + "_rgb.png"
-            )
-            save_path_mask = os.path.join(
-                out_vis, image_name.split(".")[0] + "_" + label + "_mask.png"
-            )
-            cv2.imwrite(
-                save_path_rgb, bgr[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2], :]
-            )
-            cv2.imwrite(
-                save_path_mask, mask[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
-            )
+            T_M2C = np.linalg.inv(T_C2M)
+            R_M2C = T_M2C[:3, :3].flatten().tolist()
+            t_M2C = T_M2C[:3, 3].flatten().tolist()
 
+            object_gt = {
+                "obj_id": label_id,
+                "cam_R_m2c": R_M2C,
+                "cam_t_m2c": t_M2C,
+            }
+            gt_list.append(object_gt)
+            # save_path_rgb = os.path.join(
+            #     out_vis, image_name.split(".")[0] + "_" + label + "_rgb.png"
+            # )
+            # save_path_mask = os.path.join(
+            #     out_vis, image_name.split(".")[0] + "_" + label + "_mask.png"
+            # )
+            # cv2.imwrite(
+            #     save_path_rgb, bgr[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2], :]
+            # )
+            # cv2.imwrite(
+            #     save_path_mask, mask[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
+            # )
+        scene_gt[str(int(image_name.split(".")[0]))] = gt_list
         mask2show = np.repeat(mask2show[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
         # print(mask2show)
+        cv2.imwrite(os.path.join(out_image_folder, image_name), img_undistorted)
         blended = cv2.addWeighted(img_undistorted, 0.5, mask2show, 0.5, 0)
         for rect in rectangles:
             cv2.rectangle(
@@ -303,8 +320,10 @@ if __name__ == "__main__":
         cv2.imshow("blended", blended)
         cv2.imwrite(os.path.join(out_vis, image_name), blended)  # Delete later
 
-        cv2.waitKey(0)
+        cv2.waitKey(1)
 
+    with open(os.path.join(bop_folder, "scene_gt.json"), "w") as f:
+        json.dump(scene_gt, f, indent=2)
     print("Finished")
 
 # DEBUG WORKS
