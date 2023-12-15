@@ -69,22 +69,23 @@ class MegaposeInferenceServer:
         self.model_info = NAMED_MODELS[model_name]
 
         # Maybe replace with loading from json file
-        self.camera_json_path = KPath
-        with open(KPath, "r") as f:
-            K_dict = json.load(f)
-            # self.K = K_dict["K"]
-            # print(self.K)
-            # self.res = K_dict["resolution"]  # TODO: Maybe add checking for the given expected shape
-            self.res = [0, 0]
-            for key in K_dict.keys():
-                if key in ["K", "camera_matrix"]:
-                    self.K = K_dict[key]
-                elif key in ["resolution"]:
-                    self.res = K_dict[key]
-                elif key in ["w", "width"]:
-                    self.res[1] = K_dict[key]
-                elif key in ["h", "height"]:
-                    self.res[0] = K_dict[key]
+        if KPath is not None:
+            self.camera_json_path = KPath
+            with open(KPath, "r") as f:
+                K_dict = json.load(f)
+                # self.K = K_dict["K"]
+                # print(self.K)
+                # self.res = K_dict["resolution"]  # TODO: Maybe add checking for the given expected shape
+                self.res = [0, 0]
+                for key in K_dict.keys():
+                    if key in ["K", "camera_matrix"]:
+                        self.K = K_dict[key]
+                    elif key in ["resolution"]:
+                        self.res = K_dict[key]
+                    elif key in ["w", "width"]:
+                        self.res[1] = K_dict[key]
+                    elif key in ["h", "height"]:
+                        self.res[0] = K_dict[key]
 
         rigid_objects = []
         for key, label in LABELS.items():
@@ -166,6 +167,47 @@ class MegaposeInferenceServer:
         translation = pose.translation
 
         return np.concatenate([quaternion, translation])
+
+    def run_inference_batch(
+        self, image: np.ndarray, bboxes: np.ndarray, ids: np.ndarray, K: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Run inference on the image with multiple objects.
+
+        Args:
+            image (np.ndarray): Image to run inference on. RGB[D] image, depth is optional.
+            bboxes (np.ndarray): Bounding boxes of the objects in the image. Shape(N, 4)
+            ids (np.ndarray): Ids of the objects in the image. Shape(N,)
+            K (np.ndarray): Intrinsic matrix ot the image. Shape(3, 3)
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: Rotation matrices and translations of the objects. Shape(N, 3, 3), Shape(N, 3)
+        """
+        rgb = image
+        depth = None
+        if rgb.shape[2] == 4:
+            rgb = image[:, :, :3]
+            depth = image[:, :, 3]
+
+        observation = ObservationTensor.from_numpy(rgb, depth, K).cuda()
+
+        object_data = []
+        for bbox, id in zip(bboxes, ids):
+            id = int(id)
+            label = LABELS[id]
+            obj_data = {"label": label, "bbox_modal": bbox}
+            object_data.append(obj_data)
+
+        input_object_data = [ObjectData.from_json(d) for d in object_data]
+        detections = make_detections_from_object_data(input_object_data).cuda()
+        output, _ = self.pose_estimator.run_inference_pipeline(
+            observation, detections=detections, **self.model_info["inference_parameters"]
+        )
+        poses = output.poses.cpu().numpy()
+        poses = [Transform(pose) for pose in poses]
+
+        T_matrices = np.array([pose.matrix() for pose in poses])
+
+        return T_matrices[:, :3, :3], T_matrices[:, :3, -1]
 
     def visualize_pose(self, pose: np.ndarray, rgb: np.ndarray, id: np.ndarray, K: np.ndarray):
         quat = pose[:4]
