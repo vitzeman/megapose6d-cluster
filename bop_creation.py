@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from scipy.spatial.transform import Rotation as R
 from tqdm import tqdm
+import png
 
 import os
 import json
@@ -25,7 +26,8 @@ from megapose.utils.conversion import convert_scene_observation_to_panda3d
 # PATH2MESHES = Path(
 #     "/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "meshes_BakedSDF"
 # )
-PATH2MESHES = Path("local_data", "rc_car", "meshes_BakedSDF")
+# PATH2MESHES = Path("local_data", "rc_car", "meshes_BakedSDF")
+PATH2MESHES = Path("local_data", "rc_car", "meshes_CAD")
 PATH2VIS = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "vis")
 
 # TODO: Create directory with all the meshes for megapose # Probably the bakedsdf
@@ -42,6 +44,25 @@ LABELS = {
 }
 
 T_Gl2Cv = np.diag([1, -1, -1, 1])
+
+
+def save_depth(depth: np.ndarray, path: str, scale: float = 1000) -> None:
+    """Saves the depth image to the path in png format uint16
+
+    Args:
+        depth (np.ndarray): Depth image
+        path (str): Path to save the depth image
+        scale (float, optional): Scale of the depth image. Defaults to 1000 (m to mm)
+    """
+    depth = depth * 1000  # m to mm
+    depth = depth.astype(np.uint16)
+    depth = np.where(depth > 65535, 65535, depth)
+
+    with open(path, "wb") as f:
+        writer = png.Writer(
+            width=depth.shape[1], height=depth.shape[0], greyscale=True, bitdepth=16
+        )
+        writer.write(f, depth.reshape(-1, depth.shape[1]))
 
 
 def get_bbox_from_mask(mask: np.ndarray) -> np.ndarray:
@@ -101,7 +122,7 @@ class BboxFromProjection:
 
     def get_bbox(
         self, K: np.ndarray, pose: np.ndarray, label: str, res: Tuple[int, int]
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Returns the bounding box and the mask of the object by projecting the mesh to the image plane
 
         Args:
@@ -111,7 +132,7 @@ class BboxFromProjection:
             res (Tuple[int, int]): Resolution of the image to be rendered (height, width)
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: Bounding box and mask of the object
+            Tuple[np.ndarray, np.ndarray]: Mask of the object, rgb render, depth render, bounding box
         """
         if label not in LABELS.values():
             raise ValueError(f"Label {label} is not in the list of labels {LABELS.values()}")
@@ -156,6 +177,7 @@ class BboxFromProjection:
         )[0]
 
         rgb = rendering.rgb
+        depth = rendering.depth
         # print(f"rgb {type(rgb)} {rgb.shape}, {np.unique(rgb, return_counts=True)}")
         # cv2.imwrite("testrgb.png", rgb)
 
@@ -169,20 +191,19 @@ class BboxFromProjection:
         bbox = get_bbox_from_mask(mask)
         # bbox = None
 
-        return mask, rgb, bbox
+        return mask, rgb, depth, bbox
 
 
-def tags_dataset():
+def tags_dataset_debug():
     # Use proper GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-    bop_folder = os.path.join("6D_pose_dataset", "BOP_format")
-    dataset_names = ["Capture", "Manual", "Tags"]
+    bop_folder = os.path.join("6D_pose_dataset", "BOP_format", "Tags")
 
     camera_data_folder = os.path.join("6D_pose_dataset", "camera_data")
 
     in_image_folder = os.path.join("6D_pose_dataset", "color")
 
-    out_image_folder = os.path.join(bop_folder, "color")
+    out_image_folder = os.path.join(bop_folder, "rgb")
     os.makedirs(out_image_folder, exist_ok=True)
 
     out_vis = os.path.join("6D_pose_dataset", "out_vis")
@@ -210,12 +231,11 @@ def tags_dataset():
     print(roi)
 
     with open(
-        os.path.join("6D_pose_dataset", "transformation", "transformations_nerfacto.json"), "r"
+        os.path.join("6D_pose_dataset", "transformation", "transformations_test.json"), "r"
     ) as f:
         T_W2M_dict = json.load(f)
 
     with open(os.path.join(camera_data_folder, "transforms.json"), "r") as f:
-        # Tady je chyba nutno načítat jinak
         transforms = json.load(f)
 
     W2C_SCALE = transforms["scale_pose"] * 1000  # for mm as everything else is also in mms
@@ -245,7 +265,29 @@ def tags_dataset():
     frames = transforms["frames"]  # List of dicts
     cv2.namedWindow("blended", cv2.WINDOW_NORMAL)
     scene_gt = {}
-    for frame in tqdm(frames):  # for dist in list
+    scene_camera = {}
+
+    debug_images = [
+        "000000.png",
+        "000164.png",
+        "000504.png",
+        "000700.png",
+        "001280.png",
+        "001420.png",
+        "004311.png",
+        "005248.png",
+        "005726.png",
+        "006006.png",
+        "006134.png",
+    ]
+    idx = 0
+    # for frame in tqdm(frames):  # for dist in list
+    while True:
+        frame_name = debug_images[idx]
+        print(frame_name)
+        for frame in frames:
+            if frame["file_path"].split("/")[-1] == frame_name:
+                break
         gt_list = []
         image_path = frame["file_path"]
         image_name = image_path.split("/")[-1]
@@ -263,9 +305,18 @@ def tags_dataset():
         t_W2C = T_W2C[:3, 3] * W2C_SCALE
         T_W2C[:3, 3] = t_W2C
 
+        T_C2W = T_Gl2Cv @ np.linalg.inv(T_W2C)
+        T_w2c = np.linalg.inv(T_C2W)
+        R_w2c = T_w2c[:3, :3]
+        t_w2c = T_w2c[:3, 3]
+
         mask2show = np.zeros((h, w), dtype=np.uint8)
         rectangles = []
-        for label_id in [1, 2, 3, 4, 5, 6, 7, 8]:
+        depth_map = np.zeros((h, w, 1), dtype=np.float16)
+
+        # for label_id in [1, 2, 3, 4, 5, 6, 7, 8]:
+
+        for label_id in [8]:
             # Transformation between the mesh and instant ngp mesh
             T_Wn2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
             # T_C2W = T_Gl2Cv @ np.linalg.inv(T_W2C)
@@ -280,7 +331,37 @@ def tags_dataset():
 
             # Render the mask, image and bounding box
             label = LABELS[label_id]
-            mask, rgb, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
+            print(label)
+            mask, rgb, depth, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
+
+            # print(bbox)  # It is [0,0,0,0] if the object is not in the image
+            # filter out the object out of the image and the object that is too small
+            # or too close to the edge
+            bx, by, bw, bh = bbox.tolist()
+            bx2 = bx + bw
+            by2 = by + bh
+
+            if label_id in [2]:  # small parts need to have lower limit
+                limit = 0.05
+            elif label_id in [3, 4]:
+                limit = 0.075
+            else:
+                limit = 0.1
+
+            # small_bbox = bw < w * limit and bh < h * limit
+            too_left = bx2 < w * limit
+            too_top = by2 < h * limit
+            too_right = bx > w * (1 - limit)
+            too_bottom = by > h * (1 - limit)
+
+            if too_left or too_top or too_right or too_bottom:
+                print(
+                    f"Skipping {label} because of: too_left {too_left}, too_top {too_top}, too_right {too_right}, too_bottom {too_bottom}"
+                )
+                continue
+
+            # update the depth map, only if the mask is not 0 and the new depth is closer than the current depth
+            depth_map = np.where(np.logical_and(depth > 0, depth < depth_map), depth, depth_map)
 
             mask2show = np.where(mask > 0, 255, mask2show)
 
@@ -297,6 +378,7 @@ def tags_dataset():
                 "cam_t_m2c": t_M2C,
             }
             gt_list.append(object_gt)
+            break
             # save_path_rgb = os.path.join(
             #     out_vis, image_name.split(".")[0] + "_" + label + "_rgb.png"
             # )
@@ -310,6 +392,11 @@ def tags_dataset():
             #     save_path_mask, mask[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
             # )
         scene_gt[str(int(image_name.split(".")[0]))] = gt_list
+        scene_camera[str(int(image_name.split(".")[0]))] = {
+            "cam_K": K_undistorted.flatten().tolist(),
+            "cam_R_w2c": R_w2c.flatten().tolist(),
+            "cam_t_w2c": t_w2c.flatten().tolist(),
+        }
         mask2show = np.repeat(mask2show[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
         # print(mask2show)
         cv2.imwrite(os.path.join(out_image_folder, image_name), img_undistorted)
@@ -322,10 +409,232 @@ def tags_dataset():
         cv2.imshow("blended", blended)
         cv2.imwrite(os.path.join(out_vis, image_name), blended)  # Delete later
 
-        cv2.waitKey(1)
+        key = cv2.waitKey(0)
+        if key == ord("q"):
+            break
+        elif key == ord("n"):
+            idx -= 1
+        elif key == ord("m"):
+            idx += 1
+        idx = max(0, min(idx, len(debug_images) - 1))
 
     with open(os.path.join(bop_folder, "scene_gt.json"), "w") as f:
         json.dump(scene_gt, f, indent=2)
+
+    with open(os.path.join(bop_folder, "scene_camera.json"), "w") as f:
+        json.dump(scene_camera, f, indent=2)
+
+    print("Finished")
+
+
+def tags_dataset(
+    output_folder: str = os.path.join("6D_pose_dataset", "BOP_format", "Tags"),
+    depth_scale: float = 0.01,
+):
+    """Creates the dataset in BOP format from the tags dataset
+
+    Args:
+        output_folder (str, optional): Where to save the data. Defaults to os.path.join("6D_pose_dataset", "BOP_format", "Tags").
+    """
+    # Use proper GPU
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    bop_folder = output_folder
+
+    camera_data_folder = os.path.join("6D_pose_dataset", "camera_data")
+
+    in_image_folder = os.path.join("6D_pose_dataset", "color")
+
+    out_image_folder = os.path.join(bop_folder, "rgb")
+    os.makedirs(out_image_folder, exist_ok=True)
+    out_depth_folder = os.path.join(bop_folder, "depth")
+    os.makedirs(out_depth_folder, exist_ok=True)
+
+    out_vis = os.path.join("6D_pose_dataset", "out_vis")
+
+    scene_gt = {}
+    scene_gt_info = {}
+    scene_camera = {}
+
+    with open(os.path.join(camera_data_folder, "camera_parameters.json"), "r") as f:
+        camera_parameters = json.load(f)
+
+    K_distorted = np.array(camera_parameters["camera_matrix"])
+    dist_coeffs = np.array(camera_parameters["distortion_coefficients"])
+    height_distorted = camera_parameters["height"]
+    width_distorted = camera_parameters["width"]
+
+    K_undistorted, roi = cv2.getOptimalNewCameraMatrix(
+        K_distorted,
+        dist_coeffs,
+        (width_distorted, height_distorted),
+        1,
+        (width_distorted, height_distorted),
+    )
+    x, y, w, h = roi
+    print(roi)
+
+    with open(
+        os.path.join("6D_pose_dataset", "transformation", "transformations_test.json"), "r"
+    ) as f:
+        T_W2M_dict = json.load(f)
+
+    with open(os.path.join(camera_data_folder, "transforms.json"), "r") as f:
+        transforms = json.load(f)
+
+    W2C_SCALE = transforms["scale_pose"] * 1000  # for mm as everything else is also in mms
+
+    # Convert from OpenGL to OpenCV camera format and vice versa
+    T_Gl2Cv = np.diag([1, -1, -1, 1])
+
+    # Transformation between board base and instant ngp mesh
+    T_W2Wn = np.eye(4)
+    T_W2Wn[:3, :3] = R.from_euler("ZYX", [90, 0, 90], degrees=True).as_matrix()
+
+    bop = BboxFromProjection()
+    frames = transforms["frames"]  # List of dicts
+    cv2.namedWindow("blended", cv2.WINDOW_NORMAL)
+    scene_gt = {}
+    scene_camera = {}
+    for frame in tqdm(frames, unit="file", ncols=80):  # for dist in list
+        gt_list = []
+        image_path = frame["file_path"]
+        image_name = image_path.split("/")[-1]
+        # if image_name not in ["001430.png", "005731.png"]:  # TODO: remove later
+        #     # print(f"Skipping {image_name}")
+        #     continue
+
+        image = cv2.imread(os.path.join(in_image_folder, image_name))
+        img_undistorted = cv2.undistort(image, K_distorted, dist_coeffs, None, K_undistorted)
+        img_undistorted = img_undistorted[y : y + h, x : x + w]
+        # OpenGL 2 OpenCV camera format
+        # Get the transformation for the camera
+
+        T_W2C = np.array(frame["transform_matrix"])
+        t_W2C = T_W2C[:3, 3] * W2C_SCALE
+        T_W2C[:3, 3] = t_W2C
+
+        T_C2W = T_Gl2Cv @ np.linalg.inv(T_W2C)
+        T_w2c = np.linalg.inv(T_C2W)
+        R_w2c = T_w2c[:3, :3]
+        t_w2c = T_w2c[:3, 3]
+
+        mask2show = np.zeros((h, w), dtype=np.uint8)
+        rectangles = []
+        depth_map = np.zeros((h, w, 1), dtype=np.float16)
+
+        for label_id in [1, 2, 3, 4, 5, 6, 7, 8]:
+            # Transformation between the mesh and instant ngp mesh
+            T_Wn2M = np.array(T_W2M_dict[LABELS[label_id] + "_T_W2M"])
+            # T_C2W = T_Gl2Cv @ np.linalg.inv(T_W2C)
+
+            # T_C2M = T_Gl2Cv @ np.linalg.inv(T_W2C) @ T_W2Wn @ T_Wn2M
+
+            # Random shift
+            T_shift = np.eye(4)
+            T_shift[:3, 3] = np.array([0, 0, 0])
+
+            T_C2M = T_Gl2Cv @ np.linalg.inv(T_W2C) @ T_W2Wn @ T_Wn2M
+
+            # Render the mask, image and bounding box
+            label = LABELS[label_id]
+            mask, rgb, depth, bbox = bop.get_bbox(K_undistorted, T_C2M, label, (h, w))
+
+            bx, by, bw, bh = bbox.tolist()
+            bx2 = bx + bw
+            by2 = by + bh
+
+            # if label_id in [2]:  # small parts need to have lower limit
+            #     limit = 0.05
+            # elif label_id in [3, 4]:
+            #     limit = 0.075
+            # else:
+            #     limit = 0.1
+
+            limit = 0.1
+
+            # small_bbox = bw < w * limit and bh < h * limit
+            too_left = bx2 < w * limit
+            too_top = by2 < h * limit
+            too_right = bx > w * (1 - limit)
+            too_bottom = by > h * (1 - limit)
+
+            if too_left or too_top or too_right or too_bottom:
+                # print(
+                #     f"Skipping {label} because of: too_left {too_left}, too_top {too_top}, too_right {too_right}, too_bottom {too_bottom}"
+                # )
+                continue
+
+            # print(depth.shape, np.unique(depth, return_counts=True))
+            # update the depth map, only if the mask is not 0 and the new depth is closer than the current depth
+            depth_map = np.where(depth_map == 0, np.inf, depth_map)
+            depth_map = np.where(np.logical_and(depth > 0, depth < depth_map), depth, depth_map)
+            depth_map = np.where(depth_map == np.inf, 0, depth_map)
+            mask2show = np.where(mask > 0, 255, mask2show)
+
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            rectangles.append(bbox)
+
+            T_M2C = np.linalg.inv(T_C2M)
+            R_M2C = T_M2C[:3, :3].flatten().tolist()
+            t_M2C = T_M2C[:3, 3].flatten().tolist()
+
+            object_gt = {
+                "obj_id": label_id,
+                "cam_R_m2c": R_M2C,
+                "cam_t_m2c": t_M2C,
+            }
+            gt_list.append(object_gt)
+
+            # DEBUG VISUALIZATION OF THE renders
+            # save_path_rgb = os.path.join(
+            #     out_vis, image_name.split(".")[0] + "_" + label + "_rgb.png"
+            # )
+            # save_path_mask = os.path.join(
+            #     out_vis, image_name.split(".")[0] + "_" + label + "_mask.png"
+            # )
+            # cv2.imwrite(
+            #     save_path_rgb, bgr[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2], :]
+            # )
+            # cv2.imwrite(
+            #     save_path_mask, mask[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
+            # )
+
+        # Adding the annotations to the scene_gt and scene_camera
+        scene_gt[str(int(image_name.split(".")[0]))] = gt_list
+        scene_camera[str(int(image_name.split(".")[0]))] = {
+            "cam_K": K_undistorted.flatten().tolist(),
+            "cam_R_w2c": R_w2c.flatten().tolist(),
+            "cam_t_w2c": t_w2c.flatten().tolist(),
+            "depth_scale": depth_scale,
+        }
+        # Saving the images and the depth
+        cv2.imwrite(os.path.join(out_image_folder, image_name), img_undistorted)
+        # print(depth_map.shape, np.unique(depth_map, return_counts=True))
+        save_depth(
+            depth_map, os.path.join(out_depth_folder, image_name), scale=1000 * 1 / depth_scale
+        )
+
+        # Visualizition of the detections
+        mask2show = np.repeat(mask2show[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
+        blended = cv2.addWeighted(img_undistorted, 0.5, mask2show, 0.5, 0)
+        for rect in rectangles:
+            bx, by, bw, bh = rect
+            cv2.rectangle(blended, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
+
+        cv2.imshow("blended", blended)
+        cv2.imwrite(os.path.join(out_vis, image_name), blended)  # Delete later
+
+        key = cv2.waitKey(1)
+        if key == ord("q"):
+            break
+
+    # Saving the annotations and the camera parameters
+    with open(os.path.join(bop_folder, "scene_gt.json"), "w") as f:
+        json.dump(scene_gt, f, indent=2)
+
+    with open(os.path.join(bop_folder, "scene_camera.json"), "w") as f:
+        json.dump(scene_camera, f, indent=2)
+
     print("Finished")
 
 
@@ -391,13 +700,15 @@ def capture_dataset():
 
     cv2.namedWindow("blended", cv2.WINDOW_NORMAL)
     # for label_id in [1, 2, 3, 4, 5, 6, 7, 8]:
-    for label_id in [1, 2, 3, 4, 5, 6]:
+    for label_id in [8]:
         out_folder = os.path.join(bop_folder, str(label_id))
         print(out_folder)
         out_img_folder = os.path.join(out_folder, "rgb")
         in_img_folder = os.path.join(out_folder, "images")
         os.makedirs(out_img_folder, exist_ok=True)
         label = LABELS[label_id]
+        out_debug_img_folder = os.path.join("6D_pose_dataset", "out_vis", label)
+        os.makedirs(out_debug_img_folder, exist_ok=True)
 
         with open(os.path.join(out_folder, "transforms_all.json"), "r") as f:
             transforms = json.load(f)
@@ -421,7 +732,7 @@ def capture_dataset():
             image = cv2.imread(os.path.join(out_img_folder, new_name))
 
             T_W2C = np.array(frame["transform_matrix"]) @ T_Gl2Cv
-            T_W2C[:3, 3] = (T_W2C[:3, 3] + shift) * scale
+            T_W2C[:3, 3] = (T_W2C[:3, 3]) * scale
 
             T_C2W = np.linalg.inv(T_W2C)
             # print(T_C2W)
@@ -433,7 +744,8 @@ def capture_dataset():
 
             new_name = str(int(image_name.split(".")[0].split("_")[-1])).zfill(6) + ".png"
             cv2.imshow("blended", blended)
-            # cv2.imwrite(os.path.join(out_img_folder, new_name), blended)  # Delete later
+
+            cv2.imwrite(os.path.join(out_debug_img_folder, new_name), blended)  # Delete later
             cv2.waitKey(1)
 
             img_id = str(int(new_name.split(".")[0]))
@@ -460,7 +772,9 @@ def capture_dataset():
 # Main
 if __name__ == "__main__":
     print("Starting")
-    capture_dataset()
+    # capture_dataset()
+    output_folder = os.path.join("6D_pose_dataset", "BOP_format", "Tags")
+    tags_dataset(output_folder)
 
 # DEBUG WORKS
 # if __name__ == "__main__":
