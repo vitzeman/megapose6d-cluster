@@ -64,7 +64,7 @@ def run_pose_est_server():
     visualize = args.visualze
 
     print("Initializing the estimator")
-    pose_estimator = MegaposeInferenceServer(K_path, visualize=visualize)
+    pose_estimator = MegaposeInferenceServer(None, visualize=visualize)
 
     with MLSocket() as s:
         s.setsockopt(

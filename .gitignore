@@ -27,6 +27,12 @@ tests.sh
 6D_pose_dataset/BOP_format/*/rgb/
 6D_pose_dataset/BOP_format/*/depth/
 6D_pose_dataset/BOP_format/Capture/*/rgb/
+
+6D_pose_dataset/BOP_format/Tags/*/*/mask_visib/
+6D_pose_dataset/BOP_format/Tags/*/*/depth/
+6D_pose_dataset/BOP_format/Tags/*/*/rgb/
+6D_pose_dataset/BOP_format/Tags/scene_gt.json
+6D_pose_dataset/BOP_format/Tags/scene_camera.json
 6D_pose_dataset/out_vis
 6D_pose_dataset/images
 6D_pose_dataset/color

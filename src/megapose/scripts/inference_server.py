@@ -64,8 +64,17 @@ class MegaposeInferenceServer:
         self,
         KPath: Path,
         model_name: str = "megapose-1.0-RGB-multi-hypothesis",
+        mesh_dir: Path = PATH2MESHES,
         visualize: bool = False,
     ) -> None:
+        """Initializes the inference server.
+
+        Args:
+            KPath (Path): Path to the camera matrix. MAYBE DELETE IN FUTURE
+            model_name (str, optional): Name of the model, keep for now. Defaults to "megapose-1.0-RGB-multi-hypothesis".
+            mesh_dir (Path, optional): Path to folder with the meshes. Defaults to PATH2MESHES.
+            visualize (bool, optional): Save the visualization of the inference. Defaults to False.
+        """
         self.model_info = NAMED_MODELS[model_name]
 
         # Maybe replace with loading from json file
@@ -89,7 +98,7 @@ class MegaposeInferenceServer:
 
         rigid_objects = []
         for key, label in LABELS.items():
-            mesh_path = PATH2MESHES / label / "mesh.obj"
+            mesh_path = mesh_dir / label / "mesh.obj"
             # print(f"mesh path {type(mesh_path)} {mesh_path}")
             rigid_objects.append(RigidObject(label=label, mesh_path=mesh_path, mesh_units="mm"))
         self.object_dataset = RigidObjectDataset(rigid_objects)

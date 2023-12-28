@@ -398,9 +398,12 @@ def tags_dataset_debug():
             "cam_t_w2c": t_w2c.flatten().tolist(),
         }
         mask2show = np.repeat(mask2show[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
+        # mask2show[:, :, 1:] = 0
         # print(mask2show)
         cv2.imwrite(os.path.join(out_image_folder, image_name), img_undistorted)
         blended = cv2.addWeighted(img_undistorted, 0.5, mask2show, 0.5, 0)
+        img2show = img_undistorted.copy()
+        img2show[mask2show > 0] = blended[mask2show > 0]
         for rect in rectangles:
             cv2.rectangle(
                 blended, (rect[0], rect[1]), (rect[0] + rect[2], rect[1] + rect[3]), (0, 255, 0), 2
@@ -520,7 +523,10 @@ def tags_dataset(
 
         mask2show = np.zeros((h, w), dtype=np.uint8)
         rectangles = []
-        depth_map = np.zeros((h, w, 1), dtype=np.float16)
+
+        max_uint16 = np.iinfo(np.uint16).max
+        depth_map = np.full((h, w, 1), max_uint16, dtype=np.float16)
+        # depth_map = np.zeros((h, w, 1), dtype=np.float16)
 
         for label_id in [1, 2, 3, 4, 5, 6, 7, 8]:
             # Transformation between the mesh and instant ngp mesh
@@ -566,15 +572,16 @@ def tags_dataset(
 
             # print(depth.shape, np.unique(depth, return_counts=True))
             # update the depth map, only if the mask is not 0 and the new depth is closer than the current depth
-            depth_map = np.where(depth_map == 0, np.inf, depth_map)
+            # depth_map = np.where(depth_map == 0, np.inf, depth_map)
             depth_map = np.where(np.logical_and(depth > 0, depth < depth_map), depth, depth_map)
-            depth_map = np.where(depth_map == np.inf, 0, depth_map)
+            # depth_map = np.where(depth_map == np.inf, 0, depth_map)
             mask2show = np.where(mask > 0, 255, mask2show)
 
             bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             rectangles.append(bbox)
 
-            T_M2C = np.linalg.inv(T_C2M)
+            # T_M2C = np.linalg.inv(T_C2M)
+            T_M2C = T_C2M  # Dont ask me why but this is the correct one
             R_M2C = T_M2C[:3, :3].flatten().tolist()
             t_M2C = T_M2C[:3, 3].flatten().tolist()
 
@@ -773,8 +780,9 @@ def capture_dataset():
 if __name__ == "__main__":
     print("Starting")
     # capture_dataset()
-    output_folder = os.path.join("6D_pose_dataset", "BOP_format", "Tags")
+    output_folder = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test/000001")
     tags_dataset(output_folder)
+    # tags_dataset_debug()
 
 # DEBUG WORKS
 # if __name__ == "__main__":
