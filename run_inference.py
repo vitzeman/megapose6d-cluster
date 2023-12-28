@@ -121,12 +121,13 @@ def run_eval(csv_out_path: str, BOP_dir: str):
         K = scene_camera[img_id]["cam_K"]
         K = np.array(K).reshape(3, 3)
         num_obj = len(scene_gt[img_id])
-        bboxes = np.zeros((num_obj, 4))
+        bboxes = np.zeros((num_obj, 4))  # x, y, w, h
         ids = np.zeros((num_obj,))
 
         for i, (obj_gt, obj_gt_info) in enumerate(zip(scene_gt[img_id], scene_gt_info[img_id])):
             obj_id = obj_gt_info["obj_id"]
             bbox = obj_gt_info["bbox_obj"]
+            bboxes[i] = bbox
             ids[i] = obj_id
 
         Rtxs, transls = pose_estimator.run_inference_batch(img_rgb, bboxes, ids, K)
@@ -142,11 +143,13 @@ def run_eval(csv_out_path: str, BOP_dir: str):
                 time=-1,  # Not given
             )
 
+        break
+
     csv_file.close()
     return
 
 
 if __name__ == "__main__":
     csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "megapose.csv")
-    BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags")
+    BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
     run_eval(csv_out_path, BOP_dir)
