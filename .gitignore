@@ -22,6 +22,8 @@ tmp/
 *tmp/
 tests.sh
 
+.vscode
+
 *.zip
 
 6D_pose_dataset/BOP_format/*/rgb/

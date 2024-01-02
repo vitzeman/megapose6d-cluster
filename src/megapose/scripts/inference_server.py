@@ -41,8 +41,11 @@ PATH2MESHES = Path(
     "megapose6d",
     "local_data",
     "rc_car",
-    "meshes_BakedSDF_pickable",
+    # "meshes_BakedSDF_pickable",
+    "meshes_BakedSDF",
 )
+
+
 PATH2VIS = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car", "vis")
 
 # TODO: Create directory with all the meshes for megapose # Probably the bakedsdf
@@ -98,7 +101,13 @@ class MegaposeInferenceServer:
 
         rigid_objects = []
         for key, label in LABELS.items():
-            mesh_path = mesh_dir / label / "mesh.obj"
+            # TODO Find file ending with onj
+            mesh_directory = mesh_dir / label
+            for file in os.listdir(mesh_directory):
+                if file.endswith(".obj"):
+                    mesh_file = file
+                    break
+            mesh_path = mesh_dir / label / mesh_file
             # print(f"mesh path {type(mesh_path)} {mesh_path}")
             rigid_objects.append(RigidObject(label=label, mesh_path=mesh_path, mesh_units="mm"))
         self.object_dataset = RigidObjectDataset(rigid_objects)
@@ -204,6 +213,8 @@ class MegaposeInferenceServer:
             id = int(id)
             label = LABELS[id]
             obj_data = {"label": label, "bbox_modal": bbox}
+            # print(label)
+            # print(bbox)
             object_data.append(obj_data)
 
         input_object_data = [ObjectData.from_json(d) for d in object_data]
@@ -214,11 +225,33 @@ class MegaposeInferenceServer:
         poses = output.poses.cpu().numpy()
         poses = [Transform(pose) for pose in poses]
 
-        T_matrices = np.array([pose.matrix() for pose in poses])
+        # print(type(poses))
+        # print(poses)
+
+        poses_mtxs = [pose.matrix for pose in poses]
+        # print(poses_mtxs)
+        T_matrices = np.array(poses_mtxs)
+        # print(T_matrices.shape)
 
         return T_matrices[:, :3, :3], T_matrices[:, :3, -1]
 
-    def visualize_pose(self, pose: np.ndarray, rgb: np.ndarray, id: np.ndarray, K: np.ndarray):
+    def visualize_pose(
+        self,
+        pose: np.ndarray,
+        rgb: np.ndarray,
+        id: np.ndarray,
+        K: np.ndarray,
+        save_loc: str = os.path.join(
+            "/home",
+            "zemanvit",
+            "Projects",
+            "megapose6d",
+            "local_data",
+            "rc_car",
+            "vis",
+            "rgb.png",
+        ),
+    ):
         quat = pose[:4]
         transl = pose[4:]
         id = int(id[0])
@@ -260,16 +293,4 @@ class MegaposeInferenceServer:
         export_png(fig_contour_overlay, filename=self.vis_dir / "contour_overlay.png")
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
-        cv2.imwrite(
-            os.path.join(
-                "/home",
-                "zemanvit",
-                "Projects",
-                "megapose6d",
-                "local_data",
-                "rc_car",
-                "vis",
-                "rgb.png",
-            ),
-            bgr,
-        )
+        cv2.imwrite(save_loc, bgr)
