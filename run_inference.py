@@ -129,7 +129,7 @@ def add_line(
     return
 
 
-def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder_id: int = 0):
+def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
     """Runs the evaluation of the BOP dataset and saves the result to the csv file.
 
     Args:
@@ -156,9 +156,7 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder_id: int = 0):
     imege_path = os.path.join(BOP_dir, "rgb")
     depth = None
 
-    pose_estimator = MegaposeInferenceServer(
-        None, visualize=True, mesh_dir=PATHS2MESHES[mesh_folder_id]
-    )
+    pose_estimator = MegaposeInferenceServer(None, visualize=True, mesh_dir=mesh_folder)
 
     for img_id in tqdm(scene_gt.keys()):
         img_path = os.path.join(imege_path, img_id.zfill(6) + ".png")
@@ -214,11 +212,33 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder_id: int = 0):
     return
 
 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+
+# RUN this in terminal for use of speific GPU card
+#  export CUDA_VISIBLE_DEVICES=1
 if __name__ == "__main__":
-    names = ["bakedSDF", "CAD", "CAD_textured", "Nerfacto"]  # Je prohozen Nerfactor s CAD TEXTURED
-    for i in range(2, 3):
-        csv_file_name = "megapose_" + names[i] + ".csv"
-        print(csv_file_name)
-        csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", csv_file_name)
-        BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
-        run_eval(csv_out_path, BOP_dir, mesh_folder_id=i)
+    names = [
+        "CAD_alligned",
+        "meshes_BakedSDF",
+        "meshes_BakedSDF_textureless",
+        "Nerfacto_cleared_scaled_alligned_textureless",
+    ]  # Je prohozen Nerfactor s CAD TEXTURED
+    path2mesh_folder = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car")
+
+    idx = 2
+    csv_file_name = "megapose_" + names[idx] + ".csv"
+    csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", csv_file_name)
+    BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
+    mesh_folder = path2mesh_folder / names[idx]
+
+    print(csv_out_path)
+    print(BOP_dir)
+    print(mesh_folder)
+    run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
+
+    # for i in range(2, 3):
+    #     csv_file_name = "megapose_" + names[i] + ".csv"
+    #     print(csv_file_name)
+    #     csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", csv_file_name)
+    #     BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
+    #     run_eval(csv_out_path, BOP_dir, mesh_folder_id=i)
