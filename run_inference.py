@@ -114,8 +114,8 @@ def add_line(
     assert isinstance(obj_id, int)
     assert isinstance(time, int)
 
-    R2write = str(R.flatten().tolist())[1:-1]
-    t2write = str(t.flatten().tolist())[1:-1]
+    R2write = str(R.flatten().tolist())[1:-1].replace(",", "")
+    t2write = str(t.flatten().tolist())[1:-1].replace(",", "")
     line = [
         scene_id,
         im_id,
@@ -196,6 +196,8 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
 
         Rtxs, transls = pose_estimator.run_inference_batch(img_rgb, bboxes, ids, K)
 
+        transls_mm = transls * 1000
+
         for i in range(num_obj):
             add_line(
                 csv_writer=csv_writer,
@@ -204,7 +206,7 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
                 obj_id=int(ids[i]),
                 score=1.0,  # TODO: Add score somehow from the inference
                 R=Rtxs[i, :, :],
-                t=transls[i, :],
+                t=transls_mm[i, :],
                 time=-1,  # Not given
             )
 
@@ -217,6 +219,7 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
 # RUN this in terminal for use of speific GPU card
 #  export CUDA_VISIBLE_DEVICES=1
 if __name__ == "__main__":
+    # TODO:CHANGE THIS
     names = [
         "CAD_alligned",
         "meshes_BakedSDF",
@@ -226,7 +229,7 @@ if __name__ == "__main__":
     path2mesh_folder = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car")
 
     idx = 2
-    csv_file_name = "megapose_" + names[idx] + ".csv"
+    csv_file_name = "megapose" + names[idx] + "_Tags-test" + ".csv"
     csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", csv_file_name)
     BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
     mesh_folder = path2mesh_folder / names[idx]
