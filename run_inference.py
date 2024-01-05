@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 from tqdm import tqdm
+from scipy.spatial.transform import Rotation as R
 
 # MegaPose
 from megapose.datasets.object_dataset import RigidObject, RigidObjectDataset
@@ -214,6 +215,49 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
     return
 
 
+def visualize_csv_results(path2csv, BOP_dir, mesh_folder, img2visualize: int = 0):
+    # Load the data
+    scene_camera = os.path.join(BOP_dir, "scene_camera.json")
+
+    csv_file = open(path2csv, "r")
+    csv_reader = csv.reader(csv_file, delimiter=",")
+
+    visualization_dir = Path("6D_pose_dataset", "visualization", "Tags")
+    os.makedirs(visualization_dir, exist_ok=True)
+    pose_estimator = MegaposeInferenceServer(
+        None, visualize=True, mesh_dir=mesh_folder, visualizition_dir=visualization_dir
+    )
+    for i, row in enumerate(csv_reader):
+        if i == 0:
+            continue
+        scene_id, im_id, obj_id, score, Rtx, t, time = row
+        scene_id, im_id, obj_id, score, time = (
+            int(scene_id),
+            int(im_id),
+            int(obj_id),
+            float(score),
+            int(time),
+        )
+        if im_id != img2visualize:
+            continue
+
+        Rtx = np.array(Rtx.split(" ")).astype(np.float32).reshape(3, 3)
+        t = np.array(t.split(" ")).astype(np.float32).reshape(3, 1)
+        img_id = str(im_id).zfill(6)
+        img_path = os.path.join(BOP_dir, "rgb", img_id + ".png")
+        img_bgr = cv2.imread(img_path)
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        K = scene_camera[img_id]["cam_K"]
+        K = np.array(K).reshape(3, 3)
+        img = img_rgb
+        label = [obj_id]
+        bbox = None
+        quaternion = R.from_matrix(Rtx).as_quat()
+        pose = np.concatenate([quaternion, t.flatten()])
+
+        pose_estimator.visualize_pose(pose, img, label, K, save_name=f"{img_id}_{obj_id}")
+
+
 # os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 
 # RUN this in terminal for use of speific GPU card
@@ -228,7 +272,7 @@ if __name__ == "__main__":
     ]  # Je prohozen Nerfactor s CAD TEXTURED
     path2mesh_folder = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car")
 
-    idx = 2
+    idx = 0
     csv_file_name = "megapose" + names[idx] + "_Tags-test" + ".csv"
     csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", csv_file_name)
     BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
@@ -237,7 +281,11 @@ if __name__ == "__main__":
     print(csv_out_path)
     print(BOP_dir)
     print(mesh_folder)
-    run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
+    # run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
+
+    csv_in_path = "/home/vit/Documents/DP/megapose6d-cluster/6D_pose_dataset/BOP_format/Tags/results/gt_Tags-test.csv"
+
+    visualize_csv_results(csv_in_path, BOP_dir, mesh_folder, img2visualize=0)
 
     # for i in range(2, 3):
     #     csv_file_name = "megapose_" + names[i] + ".csv"

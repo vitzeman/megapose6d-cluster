@@ -69,6 +69,7 @@ class MegaposeInferenceServer:
         model_name: str = "megapose-1.0-RGB-multi-hypothesis",
         mesh_dir: Path = PATH2MESHES,
         visualize: bool = False,
+        visualizition_dir: Path = PATH2VIS,
     ) -> None:
         """Initializes the inference server.
 
@@ -119,7 +120,7 @@ class MegaposeInferenceServer:
         self.visualize = visualize
         if self.visualize:
             print("Preparing visualization")
-            self.vis_dir = PATH2VIS
+            self.vis_dir = visualizition_dir
             os.makedirs(self.vis_dir, exist_ok=True)
             self.renderer = Panda3dSceneRenderer(self.object_dataset)
             self.light_datas = [
@@ -251,6 +252,7 @@ class MegaposeInferenceServer:
             "vis",
             "rgb.png",
         ),
+        save_name: str = "",
     ):
         quat = pose[:4]
         transl = pose[4:]
@@ -289,8 +291,8 @@ class MegaposeInferenceServer:
 
         fig_contour_overlay = self.plotter.plot_image(contour_overlay)
 
-        export_png(fig_mesh_overlay, filename=self.vis_dir / "mesh_overlay.png")
-        export_png(fig_contour_overlay, filename=self.vis_dir / "contour_overlay.png")
+        export_png(fig_mesh_overlay, filename=self.vis_dir / save_name + "mesh_overlay.png")
+        export_png(fig_contour_overlay, filename=self.vis_dir / save_name + "contour_overlay.png")
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
         cv2.imwrite(save_loc, bgr)
