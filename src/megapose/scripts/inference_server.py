@@ -187,6 +187,61 @@ class MegaposeInferenceServer:
 
         return np.concatenate([quaternion, translation])
 
+    def run_inference_single(
+        self, image: np.ndarray, bbox: np.ndarray, id: np.ndarray, K: np.ndarray
+    ) -> np.ndarray:
+        # TODO: add dimension to description
+        """Runs inference on an UNDISTOR image with given bbox and id.
+
+        Args:
+            image (np.ndarray): Image to run inference on.
+            bbox (np.ndarray): Bounding box of the object in the image.
+            id (np.ndarray): Id of the object in the image.
+            K (np.ndarray): Intrinsic matrix ot the drame
+
+        Returns:
+            np.ndarray: quaternion and translation of the object. Shape(7,)
+        """
+        # Process the input
+        id = int(id[0])
+        label = LABELS[id]
+        # not sure the shape of the image
+        depth = None
+        rgb = image
+        # TODO: check the dimensions
+        # Split the image into rgb and depth
+        if rgb.shape[2] == 4:
+            rgb = image[:, :, :3]
+            depth = image[:, :, 3]
+
+        # Observation data
+        # print(self.K)
+        observation = ObservationTensor.from_numpy(rgb, depth, K).cuda()  # DONE
+
+        # detections data
+        object_data = [
+            {
+                "label": label,
+                "bbox_modal": bbox,
+            }
+        ]
+        input_object_data = [ObjectData.from_json(d) for d in object_data]
+        detections = make_detections_from_object_data(input_object_data).cuda()  # DONE
+
+        # Run inference
+        output, _ = self.pose_estimator.run_inference_pipeline(
+            observation, detections=detections, **self.model_info["inference_parameters"]
+        )
+
+        # Process the output
+        poses = output.poses.cpu().numpy()
+        # Only one pose is returned for now
+        pose = poses[0]
+        pose = Transform(pose)
+        Tmx = pose.matrix
+
+        return Tmx[:3, :3], Tmx[:3, 3]
+
     def run_inference_batch(
         self, image: np.ndarray, bboxes: np.ndarray, ids: np.ndarray, K: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -291,8 +346,8 @@ class MegaposeInferenceServer:
 
         fig_contour_overlay = self.plotter.plot_image(contour_overlay)
 
-        export_png(fig_mesh_overlay, filename=self.vis_dir / save_name + "mesh_overlay.png")
-        export_png(fig_contour_overlay, filename=self.vis_dir / save_name + "contour_overlay.png")
+        export_png(fig_mesh_overlay, filename=self.vis_dir / (save_name + "mesh_overlay.png"))
+        export_png(fig_contour_overlay, filename=self.vis_dir / (save_name + "contour_overlay.png"))
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
         cv2.imwrite(save_loc, bgr)

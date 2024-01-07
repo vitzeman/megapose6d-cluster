@@ -186,30 +186,42 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
             label = [obj_id]
             # BBOX should probably be xmin ymin xmax ymax
 
-            # pose = pose_estimator.run_inference(img, bbox, label, K)
+            Rtx, transls = pose_estimator.run_inference_single(img, bbox, label, K)
 
-            # pose_estimator.visualize_pose(pose, img, label, K, save_loc="6D_pose_dataset/rgb.png")
-            # break
+            transls_mm = transls * 1000
 
-        # print(f"Running inference for image {img_id}")
-        # print(bboxes)
-        # print(ids)
-
-        Rtxs, transls = pose_estimator.run_inference_batch(img_rgb, bboxes, ids, K)
-
-        transls_mm = transls * 1000
-
-        for i in range(num_obj):
             add_line(
                 csv_writer=csv_writer,
                 scene_id=1,
                 im_id=int(img_id),
-                obj_id=int(ids[i]),
+                obj_id=obj_id,
                 score=1.0,  # TODO: Add score somehow from the inference
-                R=Rtxs[i, :, :],
-                t=transls_mm[i, :],
+                R=Rtx,
+                t=transls_mm,
                 time=-1,  # Not given
             )
+
+            # pose_estimator.visualize_pose(pose, img, label, K, save_loc="6D_pose_dataset/rgb.png")
+            # break
+        # print(f"Running inference for image {img_id}")
+        # print(bboxes)
+        # print(ids)
+
+        # Rtxs, transls = pose_estimator.run_inference_batch(img_rgb, bboxes, ids, K)
+
+        # transls_mm = transls * 1000
+
+        # for i in range(num_obj):
+        #     add_line(
+        #         csv_writer=csv_writer,
+        #         scene_id=1,
+        #         im_id=int(img_id),
+        #         obj_id=int(ids[i]),
+        #         score=1.0,  # TODO: Add score somehow from the inference
+        #         R=Rtxs[i, :, :],
+        #         t=transls_mm[i, :],
+        #         time=-1,  # Not given
+        #     )
 
     csv_file.close()
     return
@@ -217,12 +229,17 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
 
 def visualize_csv_results(path2csv, BOP_dir, mesh_folder, img2visualize: int = 0):
     # Load the data
+    method_name = path2csv.split("/")[-1].split("_")[0]
+    print(method_name)
+
     scene_camera = os.path.join(BOP_dir, "scene_camera.json")
+    with open(scene_camera, "r") as f:
+        scene_camera = json.load(f)
 
     csv_file = open(path2csv, "r")
     csv_reader = csv.reader(csv_file, delimiter=",")
 
-    visualization_dir = Path("6D_pose_dataset", "visualization", "Tags")
+    visualization_dir = Path("6D_pose_dataset", "visualization", "Tags", method_name)
     os.makedirs(visualization_dir, exist_ok=True)
     pose_estimator = MegaposeInferenceServer(
         None, visualize=True, mesh_dir=mesh_folder, visualizition_dir=visualization_dir
@@ -240,14 +257,16 @@ def visualize_csv_results(path2csv, BOP_dir, mesh_folder, img2visualize: int = 0
         )
         if im_id != img2visualize:
             continue
+        if im_id > img2visualize:
+            break
 
         Rtx = np.array(Rtx.split(" ")).astype(np.float32).reshape(3, 3)
-        t = np.array(t.split(" ")).astype(np.float32).reshape(3, 1)
+        t = np.array(t.split(" ")).astype(np.float32).reshape(3, 1) / 1000
         img_id = str(im_id).zfill(6)
         img_path = os.path.join(BOP_dir, "rgb", img_id + ".png")
         img_bgr = cv2.imread(img_path)
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        K = scene_camera[img_id]["cam_K"]
+        K = scene_camera[str(int(img_id))]["cam_K"]
         K = np.array(K).reshape(3, 3)
         img = img_rgb
         label = [obj_id]
@@ -264,28 +283,46 @@ def visualize_csv_results(path2csv, BOP_dir, mesh_folder, img2visualize: int = 0
 #  export CUDA_VISIBLE_DEVICES=1
 if __name__ == "__main__":
     # TODO:CHANGE THIS
+
+    idx = 5
+
     names = [
         "CAD_alligned",
+        "CAD_alligned_textured",
         "meshes_BakedSDF",
         "meshes_BakedSDF_textureless",
+        "Nerfacto_cleared_scaled_alligned",
         "Nerfacto_cleared_scaled_alligned_textureless",
     ]  # Je prohozen Nerfactor s CAD TEXTURED
     path2mesh_folder = Path("/home", "zemanvit", "Projects", "megapose6d", "local_data", "rc_car")
 
-    idx = 0
-    csv_file_name = "megapose" + names[idx] + "_Tags-test" + ".csv"
-    csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", csv_file_name)
+    aliases = {
+        "CAD_alligned": "CAD",
+        "CAD_alligned_textured": "CADtex",
+        "meshes_BakedSDF": "BakedSDF",
+        "meshes_BakedSDF_textureless": "BakedSDFTextureless",
+        "Nerfacto_cleared_scaled_alligned": "Nerfacto",
+        "Nerfacto_cleared_scaled_alligned_textureless": "NerfactoTextureless",
+    }
+
+    out_folder = "results2"
+    out_folder_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", out_folder)
+    os.makedirs(out_folder)
+    name = aliases[names[idx]]
+    csv_file_name = "megapose" + name + "_Tags-test2" + ".csv"
+    csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", out_folder, csv_file_name)
     BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
     mesh_folder = path2mesh_folder / names[idx]
 
     print(csv_out_path)
-    print(BOP_dir)
-    print(mesh_folder)
-    # run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
 
-    csv_in_path = "/home/vit/Documents/DP/megapose6d-cluster/6D_pose_dataset/BOP_format/Tags/results/gt_Tags-test.csv"
+    run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
 
-    visualize_csv_results(csv_in_path, BOP_dir, mesh_folder, img2visualize=0)
+    # csv_in_path = "6D_pose_dataset/BOP_format/Tags/results/gt_Tags-test.csv"
+    # csv_in_path = "6D_pose_dataset/BOP_format/Tags/results/MegaPoseBakedSDF_Tags-test.csv"
+    # csv_in_path = "6D_pose_dataset/BOP_format/Tags/megaposemeshes_BakedSDF_Tags-test2.csv"
+
+    # visualize_csv_results(csv_out_path, BOP_dir, mesh_folder, img2visualize=0)
 
     # for i in range(2, 3):
     #     csv_file_name = "megapose_" + names[i] + ".csv"

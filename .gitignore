@@ -36,3 +36,5 @@ tests.sh
 6D_pose_dataset/out_vis
 6D_pose_dataset/images
 6D_pose_dataset/color
+
+6D_pose_dataset/visualization/
