@@ -6,7 +6,7 @@ from pathlib import Path
 import os
 import json
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 # 3rd party
 from mlsocket import MLSocket
@@ -65,7 +65,7 @@ def run_pose_est_server():
 
     print("Initializing the estimator")
     pose_estimator = MegaposeInferenceServer(None, visualize=visualize)
-
+    i = 0
     with MLSocket() as s:
         s.setsockopt(
             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
@@ -107,7 +107,10 @@ def run_pose_est_server():
 
                 if visualize:
                     print(f"Running Visualiztion")
-                    pose_estimator.visualize_pose(pose, img, label, K)
+                    pose_estimator.visualize_pose(
+                        pose, img, label, K, save_name=f"{i}_{LABELS[idx]}"
+                    )
+                    i += 1
 
                 # break  # TODO: Remove after testing for iterations
     print("Closing server")

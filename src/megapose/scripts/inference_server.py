@@ -41,8 +41,8 @@ PATH2MESHES = Path(
     "megapose6d",
     "local_data",
     "rc_car",
-    # "meshes_BakedSDF_pickable",
-    "meshes_BakedSDF",
+    "meshes_BakedSDF_pickable",
+    # "meshes_BakedSDF",
 )
 
 
@@ -101,6 +101,7 @@ class MegaposeInferenceServer:
                         self.res[0] = K_dict[key]
 
         rigid_objects = []
+        print(f"Running inference on: {mesh_dir}")
         for key, label in LABELS.items():
             # TODO Find file ending with onj
             mesh_directory = mesh_dir / label

@@ -141,7 +141,7 @@ def run_eval(csv_out_path: str, BOP_dir: str, mesh_folder: Path):
     # Creating the csv file
     csv_file = open(csv_out_path, "w")
     csv_writer = csv.writer(csv_file, delimiter=",")
-    annotation_line = ["scene_id", "im_id", "obj_id", "score", "R", "t"]
+    annotation_line = ["scene_id", "im_id", "obj_id", "score", "R", "t", "time"]
     csv_writer.writerow(annotation_line)
 
     # Load the data
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     out_folder_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", out_folder)
     os.makedirs(out_folder)
     name = aliases[names[idx]]
-    csv_file_name = "megapose" + name + "_Tags-test2" + ".csv"
+    csv_file_name = "megapose" + name + "_Tags-test" + ".csv"
     csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", out_folder, csv_file_name)
     BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
     mesh_folder = path2mesh_folder / names[idx]
