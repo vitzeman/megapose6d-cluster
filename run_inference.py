@@ -257,8 +257,10 @@ def visualize_csv_results(path2csv, BOP_dir, mesh_folder, img2visualize: int = 0
         )
         if im_id != img2visualize:
             continue
-        if im_id > img2visualize:
-            break
+        # if im_id > img2visualize:
+        #     break
+
+        print(scene_id, im_id, obj_id)
 
         Rtx = np.array(Rtx.split(" ")).astype(np.float32).reshape(3, 3)
         t = np.array(t.split(" ")).astype(np.float32).reshape(3, 1) / 1000
@@ -284,7 +286,7 @@ def visualize_csv_results(path2csv, BOP_dir, mesh_folder, img2visualize: int = 0
 if __name__ == "__main__":
     # TODO:CHANGE THIS
 
-    idx = 5
+    idx = 0
 
     names = [
         "CAD_alligned",
@@ -307,22 +309,23 @@ if __name__ == "__main__":
 
     out_folder = "results2"
     out_folder_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", out_folder)
-    os.makedirs(out_folder)
+    # os.makedirs(out_folder)
     name = aliases[names[idx]]
     csv_file_name = "megapose" + name + "_Tags-test" + ".csv"
     csv_out_path = os.path.join("6D_pose_dataset", "BOP_format", "Tags", out_folder, csv_file_name)
     BOP_dir = os.path.join("6D_pose_dataset", "BOP_format", "Tags", "test", "000001")
     mesh_folder = path2mesh_folder / names[idx]
 
-    print(csv_out_path)
+    # print(csv_out_path)
 
-    run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
+    # run_eval(csv_out_path, BOP_dir, mesh_folder=mesh_folder)
 
     # csv_in_path = "6D_pose_dataset/BOP_format/Tags/results/gt_Tags-test.csv"
     # csv_in_path = "6D_pose_dataset/BOP_format/Tags/results/MegaPoseBakedSDF_Tags-test.csv"
     # csv_in_path = "6D_pose_dataset/BOP_format/Tags/megaposemeshes_BakedSDF_Tags-test2.csv"
+    csv_in_path = "6D_pose_dataset/BOP_format/Tags/results2/TODO_Tags-test.csv"
 
-    # visualize_csv_results(csv_out_path, BOP_dir, mesh_folder, img2visualize=0)
+    visualize_csv_results(csv_in_path, BOP_dir, mesh_folder, img2visualize=0)
 
     # for i in range(2, 3):
     #     csv_file_name = "megapose_" + names[i] + ".csv"
