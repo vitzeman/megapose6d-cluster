@@ -16,6 +16,9 @@ def create_targets_json():
             if len(img_gt) == 0:
                 continue
             for gt_obj in img_gt:
+                obj_id = gt_obj["obj_id"]
+                if obj_id == 7:
+                    continue
                 record = {
                     "im_id": int(img_id),
                     "inst_count": 1,  # Hardcoded the whole dataset was always captured with 1 instance per image
@@ -25,6 +28,8 @@ def create_targets_json():
                 targets.append(record)
 
     out_file = "test_targets_bop19.json"
+    out_file = os.path.join("without_7", out_file)
+    os.makedirs("without_7", exist_ok=True)
     with open(out_file, "w") as f:
         print(f"Writing to {out_file}")
         json.dump(targets, f, indent=2)

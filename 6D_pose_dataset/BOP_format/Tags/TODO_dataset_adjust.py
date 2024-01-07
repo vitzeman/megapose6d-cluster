@@ -34,14 +34,19 @@ if __name__ == "__main__":
         lines = list(reader)
 
     new_lines = []
+    obj_appearance = []
     for e, line in tqdm(enumerate(lines)):
         if e == 0:
             new_lines.append(line)
             continue
 
         new_line = []
-        scene_id, im_id, score, obj_id, R, t, time = line
+        scene_id, im_id, obj_id, score, R, t, time = line
         score = 1.0
+
+        if obj_id not in obj_appearance:
+            obj_appearance.append(obj_id)
+            print(sorted(obj_appearance))
 
         # R is separated by spaces so is t
         R = R.split(" ")
@@ -55,9 +60,9 @@ if __name__ == "__main__":
         T[:3, 3] = t.squeeze()
         # print(obj_id, type(obj_id))
 
-        # T_new = T @ numpy_transforms[LABELS[int(obj_id)]]
+        T_new = T @ numpy_transforms[LABELS[int(obj_id)]]
         # T_new = numpy_transforms[LABELS[int(obj_id)]] @ T
-        T_new = T @ np.linalg.inv(numpy_transforms[LABELS[int(obj_id)]])
+        # T_new = T @ np.linalg.inv(numpy_transforms[LABELS[int(obj_id)]])
         R_new = list(T_new[:3, :3].flatten())
         t_new = list(T_new[:3, 3])
 
@@ -70,6 +75,7 @@ if __name__ == "__main__":
         new_line = [scene_id, im_id, obj_id, score, R_new, t_new, time]
         new_lines.append(new_line)
 
+    print(obj_appearance)
     with open(out_path, "w") as f:
         writer = csv.writer(f)
         writer.writerows(new_lines)
