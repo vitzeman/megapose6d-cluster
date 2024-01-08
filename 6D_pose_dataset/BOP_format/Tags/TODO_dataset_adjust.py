@@ -60,9 +60,9 @@ if __name__ == "__main__":
         T[:3, 3] = t.squeeze()
         # print(obj_id, type(obj_id))
 
-        T_new = T @ numpy_transforms[LABELS[int(obj_id)]]
+        # T_new = T @ numpy_transforms[LABELS[int(obj_id)]]
         # T_new = numpy_transforms[LABELS[int(obj_id)]] @ T
-        # T_new = T @ np.linalg.inv(numpy_transforms[LABELS[int(obj_id)]])
+        T_new = T @ np.linalg.inv(numpy_transforms[LABELS[int(obj_id)]])
         R_new = list(T_new[:3, :3].flatten())
         t_new = list(T_new[:3, 3])
 
