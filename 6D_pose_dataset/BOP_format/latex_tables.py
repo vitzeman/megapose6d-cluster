@@ -29,6 +29,7 @@ aliases = {
     "Nerfacto": "Nerfacto",
     "NerfactoTextureless": "Nerfacto (textureless)",
     "gt": "GT",
+    "TODO": "TODO",
 }
 
 
@@ -71,15 +72,17 @@ def create_latex_notation_overall(path2folders, name_json="scores_bop19.json"):
             line_start = (
                 "\multirow{6}{*}{{\\rotatebox[origin=c]{90}{MegaPose}}} & " + aliases[method_name]
             )
-        else:
+        elif "MegaPose" in method:
             line_start = "&" + aliases[method_name]
+        else:
+            line_start = f"\multicolumn{{2}}{{c|}}{{{aliases[method_name]}}}"
 
         line = f"{line_start} & {AR:.2f} & {AR_VSD:.2f} & {AR_MSPD:.2f} & {AR_MSSD:.2f} " + END_ROW
         if megapose_appearance == 6 and "MegaPose" in method:
             line += HORIZONTAL_LINE
         latex_table.append(line)
 
-    caption = f"Evaluation results for all objects"
+    caption = f"Evaluation results for all objects."
     end_1 = "\\end{tabular}"
     end_2 = f"\\caption{{{caption}}}\\label{{tab:AR_all}}"
     end_3 = "\\end{table}"
@@ -191,8 +194,10 @@ def create_latex_notation_per_object(path2result):
                     "\multirow{6}{*}{{\\rotatebox[origin=c]{90}{MegaPose}}} & "
                     + aliases[method_name]
                 )
-            else:
+            elif "MegaPose" in method:
                 line_start = "&" + aliases[method_name]
+            else:
+                line_start = f"\multicolumn{{2}}{{c|}}{{{aliases[method_name]}}}"
             line = (
                 f"{line_start} & {AR:.2f} & {AR_VSD:.2f} & {AR_MSPD:.2f} & {AR_MSSD:.2f} " + END_ROW
             )
@@ -200,7 +205,7 @@ def create_latex_notation_per_object(path2result):
                 line += HORIZONTAL_LINE
             latex_table.append(line)
 
-        caption = f"Evaluation results of {object_name}"
+        caption = f"Evaluation results of {object_name}."
         end_1 = "\\end{tabular}"
         end_2 = f"\\caption{{{caption}}}\\label{{tab:AR_{object}}}"
         end_3 = "\\end{table}"
@@ -214,10 +219,17 @@ def create_latex_notation_per_object(path2result):
 
 if __name__ == "__main__":
     path2folders = os.path.join("Tags", "eval2")
+    # path2folders = os.path.join("Tags", "eval2_without7")
 
+    print(f"Results for {path2folders} \n")
     create_latex_notation_overall(path2folders)
-
+    print("\n")
     create_latex_notation_per_object(path2folders)
+
+    path2folders = os.path.join("Tags", "eval2_without7")
+
+    print(f"\nResults for {path2folders} \n")
+    create_latex_notation_overall(path2folders)
 
     # dict = {
     #     "obj_recalls": {
